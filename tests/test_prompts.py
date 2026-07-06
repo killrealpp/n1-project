@@ -24,6 +24,8 @@ def test_article_prompt_requests_theme_grouping() -> None:
     assert "candidate pool, not as a mandatory checklist" in prompt
     assert "clear semantic cluster" in prompt
     assert "Сводка за день" in prompt
+    assert "Standalone date-summary line" in prompt
+    assert "Do not merge the title, date summary, and body into one paragraph" in prompt
     assert "body must directly pay off every hook" in prompt
     assert "do not inflate one short signal into a long article" in prompt
     assert "dependency-grammar-friendly sentence structure" in prompt
@@ -42,4 +44,5 @@ def test_article_prompt_accepts_article_date() -> None:
     prompt = article_user_prompt(["BTC is higher"], 2500, 3900, article_date_label="6 июля 2026 года")
 
     assert "Сводка за 6 июля 2026 года" in prompt
-    assert "The paragraph after the title starts with the article date summary" in prompt
+    assert "There is one blank line after the title" in prompt
+    assert "The date-summary line is standalone" in prompt

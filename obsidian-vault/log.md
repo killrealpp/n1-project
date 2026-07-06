@@ -171,3 +171,11 @@ Fixed translation validation so semantically equivalent thousands formatting, su
 ## [2026-07-06] fix | Space-separated thousands in validation
 
 Extended number extraction so translations using space-separated thousands, such as source `8,000` and output `8 000`, are treated as the same number instead of separate `8` and `000` tokens. Added a regression test for this case. Verified `python -m pytest tests/test_validators.py` passes 12 tests, `python -m compileall -q src tests` succeeds, and full `python -m pytest` passes 55 tests.
+
+## [2026-07-06] fix | Multiplier suffix number validation
+
+Extended number extraction to treat source multipliers such as `1.5x` as the same numeric value as Russian translation forms like `1,5 раза`. This prevents valid translations from failing with `added numbers: 1,5` when the source used an `x` multiplier suffix. Added a regression test. Verified `python -m pytest tests/test_validators.py` passes 13 tests, `python -m compileall -q src tests` succeeds, and full `python -m pytest` passes 56 tests.
+
+## [2026-07-06] verification | Source multiplier post and Dzen article layout
+
+Rechecked the public source channel preview after the server reported `row=242` failing with `added numbers: 1,5`. The current source feed includes the mortgage post `VTB: mortgage issuance in Russia in H1 2026 grew 1.5x`, confirming that the validator needed to treat `1.5x` as equivalent to Russian `1,5 раза`. Added deterministic Dzen article formatting so generated drafts are normalized to `title`, blank line, standalone `Сводка за <date>:` line, blank line, then body paragraphs. Also repaired the Dzen article prompt and runtime date labels to use normal Russian Cyrillic. Verified targeted prompt/validator/article-review tests pass 25 cases, full `python -m pytest` passes 58 tests, `python -m compileall -q src tests` succeeds, and `--doctor` still reports OpenRouter-only readiness.

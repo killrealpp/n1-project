@@ -1,5 +1,6 @@
 from n1_project.validators import (
     ensure_title_is_sentence,
+    format_dzen_article_text,
     leftover_english_issue,
     normalize_vk_owner_id,
     preservation_issues,
@@ -75,6 +76,13 @@ def test_translation_issues_allow_space_thousands_separator() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_multiplier_suffix_translation() -> None:
+    source = "Trading volume grew 1.5x - IF"
+    output = "\u041e\u0431\u044a\u0435\u043c \u0442\u043e\u0440\u0433\u043e\u0432 \u0432\u044b\u0440\u043e\u0441 \u0432 1,5 \u0440\u0430\u0437\u0430 - IF"
+
+    assert translation_issues(source, output) == []
+
+
 def test_structure_issues_detect_line_count_and_leading_emoji_changes() -> None:
     source = "\U0001f6e2\ufe0f Qatar\n- BBG"
     output = "Qatar \U0001f6e2\ufe0f - BBG"
@@ -99,6 +107,33 @@ def test_ensure_title_is_sentence_adds_period_to_short_title_line() -> None:
 
     assert normalized.startswith("\u041a\u043e\u0440\u043e\u0442\u043a\u0438\u0439 \u0437\u0430\u0433\u043e\u043b\u043e\u0432\u043e\u043a.\n\n")
     assert validate_dzen_bridge_article(normalized, min_chars=1, max_chars=500) == []
+
+
+def test_format_dzen_article_text_separates_title_summary_and_body() -> None:
+    text = (
+        "Ипотека снова ускорилась. Сводка за 6 июля 2026 года: "
+        "DOM RF сообщил о росте выдач, а ВТБ отметил увеличение в 1,5 раза."
+    )
+
+    formatted = format_dzen_article_text(text, article_date_label="6 июля 2026 года")
+
+    assert formatted == (
+        "Ипотека снова ускорилась.\n\n"
+        "Сводка за 6 июля 2026 года:\n\n"
+        "DOM RF сообщил о росте выдач, а ВТБ отметил увеличение в 1,5 раза."
+    )
+
+
+def test_format_dzen_article_text_adds_missing_date_summary() -> None:
+    text = "Крипторынок получил новый сигнал. Bitcoin вырос, а Ethereum сохранил обороты."
+
+    formatted = format_dzen_article_text(text, article_date_label="6 июля 2026 года")
+
+    assert formatted == (
+        "Крипторынок получил новый сигнал.\n\n"
+        "Сводка за 6 июля 2026 года:\n\n"
+        "Bitcoin вырос, а Ethereum сохранил обороты."
+    )
 
 
 def test_leftover_english_allows_short_attributions_in_russian_text() -> None:

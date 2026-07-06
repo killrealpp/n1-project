@@ -245,3 +245,9 @@ async def test_process_timed_out_article_reviews_rejects_old_pending_review(tmp_
     assert article is not None
     assert article.status == "rejected_timeout"
     assert article.error == "review timed out after 3 hours"
+
+
+def test_dzen_article_date_label_uses_slot_date(tmp_path) -> None:
+    settings = Settings.from_mapping({}, project_root=tmp_path)
+
+    assert dzen_article_date_label(settings, slot_key="2026-07-06 18:00") == "6 июля 2026 года"

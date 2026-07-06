@@ -4,7 +4,7 @@ import re
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
 NUMBER_RE = re.compile(
-    r"(?<![\w.])(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)%?(?!\w)"
+    r"(?<![\w.])(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?:%|[xX])?(?!\w)"
 )
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
 LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
@@ -58,6 +58,8 @@ def normalize_number_token(value: str) -> str:
     if token.endswith("%"):
         token = token[:-1]
         suffix = "%"
+    elif token.endswith(("x", "X")):
+        token = token[:-1]
 
     token = token.replace("\u00a0", " ").replace("\u202f", " ")
     token = re.sub(r"(?<=\d)\s+(?=\d{3}(?:\D|$))", "", token)
@@ -182,6 +184,55 @@ def ensure_title_is_sentence(text: str) -> str:
             lines[index] = line.rstrip() + "."
         break
     return "\n".join(lines)
+
+
+def split_first_sentence(text: str) -> tuple[str, str]:
+    stripped = text.strip()
+    if not stripped:
+        return "", ""
+    match = re.search(r"(?<=[.!?])\s+", stripped)
+    if match:
+        return stripped[: match.start()].strip(), stripped[match.end() :].strip()
+    lines = stripped.splitlines()
+    title = lines[0].strip()
+    rest = "\n".join(lines[1:]).strip()
+    return title, rest
+
+
+def normalize_article_paragraphs(text: str) -> str:
+    lines = [line.strip() for line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    blocks: list[str] = []
+    current: list[str] = []
+    for line in lines:
+        if line:
+            current.append(line)
+            continue
+        if current:
+            blocks.append(" ".join(current))
+            current = []
+    if current:
+        blocks.append(" ".join(current))
+    return "\n\n".join(blocks)
+
+
+def format_dzen_article_text(text: str, article_date_label: str | None = None) -> str:
+    article = ensure_title_is_sentence(text)
+    title, rest = split_first_sentence(article)
+    if not title:
+        return ""
+
+    rest = normalize_article_paragraphs(rest)
+    blocks = [title]
+    if article_date_label:
+        summary = f"Сводка за {article_date_label}:"
+        if rest.lower().startswith("сводка за "):
+            summary_candidate, summary_rest = rest.split(":", 1) if ":" in rest else (summary, "")
+            summary = summary_candidate.strip() + ":"
+            rest = summary_rest.strip()
+        blocks.append(summary)
+    if rest:
+        blocks.append(rest)
+    return "\n\n".join(blocks)
 
 
 def validate_dzen_bridge_article(text: str, min_chars: int, max_chars: int) -> list[str]:

@@ -20,7 +20,7 @@ from n1_project.publishers import build_publishers
 from n1_project.scheduler import current_slot, local_now
 from n1_project.telegram_public_preview import fetch_public_preview_posts
 from n1_project.telegram_source import TelegramSource
-from n1_project.validators import ensure_title_is_sentence, translation_issues, validate_dzen_bridge_article
+from n1_project.validators import format_dzen_article_text, translation_issues, validate_dzen_bridge_article
 
 
 def configure_logging(level: str) -> None:
@@ -319,6 +319,33 @@ def dzen_article_date_label(settings: Settings, slot_key: str | None = None, now
     return f"{current.day} {RU_MONTH_NAMES[current.month]} {current.year} года"
 
 
+RU_MONTH_NAMES = (
+    "",
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
+)
+
+
+def dzen_article_date_label(settings: Settings, slot_key: str | None = None, now: datetime | None = None) -> str:
+    current = now or local_now(settings.app_timezone)
+    if slot_key:
+        try:
+            current = datetime.strptime(slot_key.split()[0], "%Y-%m-%d")
+        except (IndexError, ValueError):
+            logging.warning("could not parse Dzen article slot date: %s", slot_key)
+    return f"{current.day} {RU_MONTH_NAMES[current.month]} {current.year} года"
+
+
 async def draft_dzen_article_with_validation(
     model: TextModel,
     posts: list[str],
@@ -339,7 +366,7 @@ async def draft_dzen_article_with_validation(
             review_note=note,
             article_date_label=article_date_label,
         )
-        article = ensure_title_is_sentence(article)
+        article = format_dzen_article_text(article, article_date_label=article_date_label)
         issues = validate_dzen_bridge_article(
             article,
             min_chars=settings.dzen_article_target_min_chars,
@@ -944,12 +971,14 @@ async def amain() -> None:
         print(json.dumps({"translated_text": translated}, ensure_ascii=False))
         await publish_text_once(settings, translated, dry_run=True)
         if args.article:
+            article_date_label = dzen_article_date_label(settings)
             article = await model.write_dzen_article(
                 [translated],
                 min_chars=settings.dzen_article_target_min_chars,
                 max_chars=settings.dzen_article_target_max_chars,
-                article_date_label=dzen_article_date_label(settings),
+                article_date_label=article_date_label,
             )
+            article = format_dzen_article_text(article, article_date_label=article_date_label)
             print(json.dumps({"article": article}, ensure_ascii=False))
         return
 
