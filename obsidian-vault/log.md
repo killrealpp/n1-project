@@ -167,3 +167,7 @@ Updated the ignored local `.env` so `LLM_PROVIDER`, `TRANSLATION_PROVIDER`, and 
 ## [2026-07-06] fix | Number normalization in translation validation
 
 Fixed translation validation so semantically equivalent thousands formatting, such as source `6,400` and output `6400`, does not fail as missing and added numbers. Added a regression test for removed thousands separators. Verified `python -m pytest tests/test_validators.py` passes 11 tests, full `python -m pytest` passes 54 tests, `python -m compileall -q src tests` succeeds, and `--doctor` still reports OpenRouter-only readiness.
+
+## [2026-07-06] fix | Space-separated thousands in validation
+
+Extended number extraction so translations using space-separated thousands, such as source `8,000` and output `8 000`, are treated as the same number instead of separate `8` and `000` tokens. Added a regression test for this case. Verified `python -m pytest tests/test_validators.py` passes 12 tests, `python -m compileall -q src tests` succeeds, and full `python -m pytest` passes 55 tests.

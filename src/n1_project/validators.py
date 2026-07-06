@@ -3,7 +3,9 @@ from __future__ import annotations
 import re
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
-NUMBER_RE = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?%?(?!\w)")
+NUMBER_RE = re.compile(
+    r"(?<![\w.])(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)%?(?!\w)"
+)
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
 LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
