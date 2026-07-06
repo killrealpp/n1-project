@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+import httpx
+
+from n1_project.config import Settings
+
+
+def mtproto_missing_settings(settings: Settings) -> list[str]:
+    missing = []
+    if not settings.telegram_source_channel_id:
+        missing.append("TELEGRAM_SOURCE_CHANNEL_ID")
+    if not settings.telegram_api_id:
+        missing.append("TELEGRAM_API_ID")
+    if not settings.telegram_api_hash:
+        missing.append("TELEGRAM_API_HASH")
+    if not settings.telegram_mtproto_session_string:
+        missing.append("TELEGRAM_MTPROTO_SESSION_STRING")
+    return missing
+
+
+def mtproto_session_format(settings: Settings) -> dict[str, object]:
+    value = settings.telegram_mtproto_session_string
+    if not value:
+        return {"ok": False, "error": "empty", "length": 0}
+    try:
+        from telethon.sessions import StringSession
+
+        StringSession(value)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "length": len(value)}
+    return {"ok": True, "error": None, "length": len(value)}
+
+
+def settings_health(settings: Settings) -> dict[str, object]:
+    mtproto_missing = mtproto_missing_settings(settings)
+    mtproto_session = mtproto_session_format(settings)
+    return {
+        "source_fetch_mode": settings.source_fetch_mode,
+        "telegram_target_ready": bool(settings.telegram_bot_token and settings.telegram_target_chat_id),
+        "telegram_mtproto_ready": not mtproto_missing and bool(mtproto_session["ok"]),
+        "telegram_mtproto_missing": mtproto_missing,
+        "telegram_mtproto_session": mtproto_session,
+        "telegram_public_preview_ready": bool(settings.telegram_source_public_name),
+        "vk_ready": bool(settings.vk_token and settings.vk_id),
+        "max_ready": bool(settings.max_access_token and settings.max_chat_id),
+        "admin_notifications_ready": bool(
+            settings.admin_notifications_enabled
+            and settings.telegram_bot_token
+            and settings.admin_telegram_chat_id
+        ),
+        "dzen_bridge_ready": bool(settings.telegram_bot_token and settings.dzen_telegram_bridge_chat_id),
+        "dzen_article_review_enabled": settings.dzen_article_review_enabled,
+        "dzen_article_review_ready": bool(
+            settings.dzen_article_review_enabled
+            and settings.telegram_bot_token
+            and settings.admin_telegram_chat_id
+        ),
+        "llm_provider": settings.llm_provider,
+        "ollama_base_url": settings.ollama_base_url,
+        "ollama_translation_model": settings.ollama_translation_model,
+        "article_llm_provider": settings.article_llm_provider,
+        "openrouter_article_model": settings.openrouter_article_model,
+        "publish_order": settings.publish_order,
+        "dzen_daily_articles_enabled": settings.dzen_daily_articles_enabled,
+        "dzen_article_times": settings.dzen_daily_article_times,
+        "dzen_article_min_posts": settings.dzen_article_min_posts,
+        "dzen_article_candidate_limit": settings.dzen_article_candidate_limit,
+        "dzen_article_review_timeout_hours": settings.dzen_article_review_timeout_hours,
+        "dzen_article_auto_publish_weekends": settings.dzen_article_auto_publish_weekends,
+    }
+
+
+async def ollama_health(settings: Settings) -> dict[str, object]:
+    url = f"{settings.ollama_base_url}/api/tags"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+    except Exception as exc:
+        return {"ok": False, "url": url, "error": str(exc), "models": []}
+
+    models = []
+    for item in data.get("models", []):
+        name = item.get("name")
+        if name:
+            models.append(str(name))
+    return {
+        "ok": True,
+        "url": url,
+        "models": models,
+        "translation_model_available": settings.ollama_translation_model in models,
+        "article_model_available": settings.ollama_article_model in models,
+    }
+
+
+async def run_health_check(settings: Settings) -> dict[str, object]:
+    return {
+        "settings": settings_health(settings),
+        "ollama": await ollama_health(settings),
+    }

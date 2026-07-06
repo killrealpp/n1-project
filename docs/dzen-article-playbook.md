@@ -1,0 +1,190 @@
+# Dzen Article Playbook
+
+Checked on 2026-07-06.
+
+## Sources
+
+- Official Dzen Telegram bot help: https://dzen.ru/help/ru/channel/cross-platform.html
+- Official Dzen article help: https://dzen.ru/help/ru/channel/article.html
+- Official Dzen post help: https://dzen.ru/help/ru/channel/post.html
+- Official Dzen content rules: https://dzen.ru/help/ru/requirements/rules.html
+- Official Dzen clickbait rules: https://dzen.ru/help/ru/requirements/clickbait.html
+- Official Dzen content display models: https://dzen.ru/help/ru/models.html
+- Official Dzen card-preview rules: https://dzen.ru/help/ru/requirements/card-preview.html
+- Official Dzen non-original content rules: https://dzen.ru/help/ru/requirements/copypaste.html
+
+## Bridge Constraints
+
+The project publishes Dzen material by sending a Telegram message to the Dzen bridge chat. That makes Telegram the transport limit even though direct Dzen Studio articles can be longer.
+
+- Keep bridge article text at 2500-3900 characters.
+- Keep the first sentence under 140 characters because Dzen uses it as the title.
+- Do not put links in the first sentence.
+- Do not depend on Telegram formatting; Dzen says Telegram formatting is not transferred.
+- Use blank lines, short paragraphs, and plain section labels.
+- Text-only Telegram posts are accepted by the bridge as Dzen articles or posts depending on bridge settings.
+- The source Telegram channel connected to Dzen must be public, and one Dzen channel can be linked to only one Telegram channel.
+- Dzen bridge can work automatically or manually. In automatic mode, Telegram edits can update Dzen, but Telegram deletions do not delete Dzen publications automatically.
+
+## Direct Dzen Limits To Remember
+
+These are direct Dzen Studio limits. They are useful for editorial rules even though this project sends articles through Telegram bridge.
+
+- Article title: no links, maximum 140 characters.
+- Article text: up to 100,000 characters including spaces.
+- Article attachments: up to 100 images, videos, or embeds.
+- Article image/GIF: minimum width 300 px, up to 30 MB.
+- Dzen post: 4096 characters including spaces, up to 10 images.
+- Post text supports Cyrillic, Latin, emojis, and embedded links.
+
+## Good Dzen Article Shape
+
+A good daily article should feel like an original Russian editorial digest, not a mechanically translated bundle of Telegram posts.
+
+Start with a title sentence that names the real subject and value of the article. It should be specific, truthful, and strong enough to open: use a real tension, consequence, unusual combination, exact figure, or sharp market question from the source posts. Avoid missing key facts, bait phrases, and invented drama.
+
+Use the next paragraph to answer: what happened, why it matters, and what the reader will understand by the end. This paragraph can start with a date frame such as `Сводка за 6 июля 2026 года:`, but the date frame should not replace the headline. The hook should be useful rather than manipulative.
+
+Build the body from 3-5 compact blocks. Each block should have one idea, one clear connection to the source posts, and a short takeaway. Prefer concrete nouns and verbs over generic media phrasing.
+
+End with a short synthesis: what changed, what to watch next, or what practical conclusion follows from the day. Do not add predictions unless the source posts support them.
+
+## Daily Editorial Workflow
+
+1. Collect the latest 10 translated posts that have not yet been considered for an article.
+2. Treat those posts as candidates, not a mandatory checklist.
+3. Pick one main semantic cluster or two closely related clusters. Good groupings are markets, macro, Russia, China, energy, crypto, companies, banks, currencies, and regulation.
+4. Exclude weak or isolated posts if they would force an artificial connection.
+5. Choose the title after the theme is clear. The title must sell the real article, not a more dramatic version of it.
+6. Draft the opening as the card description: what happened, who or what is affected, and why the reader should continue.
+7. Build 3-5 short blocks from source-grounded facts.
+8. Finish with a cautious synthesis: what changed today or what is worth watching next.
+9. Run the quality gate before publishing.
+
+## Title And Card Rules
+
+The title and first paragraph are the traffic gate. Make them concrete before making the article long.
+
+Useful title shapes for this project:
+
+- fact + consequence;
+- concrete market items + one unifying theme;
+- event/fact + restrained question about what changed or what to watch;
+- exact number, company, country, source, or ticker when the source supports it.
+
+Adapted Dzen headline lessons:
+
+- concrete details beat abstract wording;
+- exact numbers, names, tickers, amounts, dates, and source attributions increase trust when they are real;
+- a fact-plus-question title can work when the question is answered in the body;
+- a list title can work when the list items are visible in the article;
+- restrained negative framing is allowed only when the source fact is genuinely negative and the article explains it calmly.
+
+Avoid generic titles such as `Main market news of the day`. Avoid hidden-subject intrigue, fake quotes, exaggerated drama, invented conflict, unsupported negative framing, and shock wording. If a hook appears in the title, the article body must pay it off directly.
+
+## Recommendation Logic And Card Rules
+
+Dzen says unrestricted recommendation depends first on meeting platform requirements. After that, reach depends on factors such as subscribers, the potentially interested audience, reader reaction, views, likes, completion or reading behavior, and topic popularity.
+
+For this project, the article should therefore optimize for a truthful card and useful first screen:
+
+- The title sentence must be short, specific, and factual.
+- The first 1-2 paragraphs should make the article's subject clear because Dzen generates the card description from the first sentences.
+- Avoid vague intrigue, hidden-subject hooks, excessive caps, code-like symbols, links, many question marks, and many exclamation marks in the first sentence.
+- Do not exaggerate market moves or imply investment conclusions that the source posts do not support.
+- If the article references external sources from the Telegram posts, preserve their attribution markers instead of pretending the analysis is original reporting.
+
+## Source Channel Fit
+
+The source channel `@num1_ch` is a high-frequency English feed of short market, macro, crypto, energy, company, and Russia/China news signals. Dzen articles should therefore be market digests. They should group many short items into themes rather than inflate one post into a full article.
+
+Current cadence for this project is one article per day while article quality is being measured. Use the broad 06:00-22:00 Moscow window and prefer the later part of the business day, after enough source posts have accumulated. If there are too few posts, skip the article unless a manual run uses `--force-article`.
+
+The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=10` by default. A good article should usually come from the best related subset inside that candidate pool, not from all ten posts.
+
+Each scheduled article uses a persistent slot key such as `2026-07-03 18:00`. Published slots are skipped on later worker passes to avoid duplicate Dzen bridge posts after restarts.
+
+## Style Rules
+
+- Write in natural Russian.
+- Preserve the topic and facts of the English source posts.
+- Avoid literal translation patterns such as "eto imeet smysl dlya" when Russian would say "eto vazhno dlya" or "eto obyasnyaet".
+- Keep paragraphs short: 2-4 lines in a Telegram message.
+- Use numbers, names, links, tickers, and dates exactly as in sources unless explicitly translating a date format.
+- Keep emojis only when they fit the Russian article tone.
+- Do not overuse exclamation marks, rhetorical questions, or salesy calls to action.
+- Do not use clickbait templates like "vy ne poverite", "vse ahnuli", "to, chto proizoshlo dalshe", or hidden-subject intrigue.
+- Do not turn a one-line market signal into broad investment advice.
+
+## LLM Editing Rules
+
+Use the model to draft and organize, but keep editorial control over idea grouping, title choice, and fact checks.
+
+Before publishing, remove common AI traces:
+
+- vague summaries;
+- inflated significance;
+- awkward metaphors;
+- repetitive transitions;
+- unsupported context;
+- punctuation that looks unnatural in Russian.
+
+Human readability rules:
+
+- use dependency-grammar-friendly structure: words that depend on each other should stay close;
+- keep subject, verb, and object close when Russian syntax allows it;
+- put the main fact early in the sentence;
+- move caveats and background after the fact;
+- use active, direct Russian phrasing;
+- keep one paragraph to one idea;
+- split sentences that carry two separate ideas;
+- remove robotic transitions unless they are truly needed.
+
+Typical edits after an LLM draft:
+
+- replace generic openings with the day's actual topic;
+- remove filler such as "it is important to note";
+- cut unsupported explanations of causes;
+- split overloaded paragraphs;
+- make the title more concrete;
+- remove any fact that cannot be traced to the source posts;
+- smooth Russian punctuation and rhythm.
+
+## Quality Gate
+
+Publish only when all checks pass:
+
+- the title is under 140 characters and contains no link;
+- the title names the real subject instead of hiding it;
+- every title hook is answered in the article body;
+- the paragraph after the title starts with a date-frame summary;
+- the first paragraph can stand alone as a Dzen card description;
+- the article uses several source posts or honestly stays short when material is thin;
+- all numbers, dates, names, tickers, sources, and links are preserved accurately;
+- the text does not give investment advice;
+- the text does not invent causes, predictions, quotes, or statistics;
+- the tone is natural Russian market-news prose, not promotional, robotic, or sensational;
+- the full bridge message stays below Telegram's 4096-character transport limit.
+
+## Moderation Guardrails
+
+Dzen can limit recommendations or block content for rule violations. The article generator must avoid:
+
+- clickbait or misleading titles;
+- copied, non-original, or unauthorized content;
+- spam and artificial engagement schemes;
+- hate, dehumanization, extremism, violence promotion, or group-based hostility;
+- illegal goods/services or instructions for illegal acts;
+- drug, weapon, gambling, or suicide instructions;
+- graphic/shocking content used for attention;
+- medical or pharmaceutical claims framed as advice without careful context;
+- personal data exposure;
+- unverified accusations against specific people or organizations.
+
+## Article Prompt Contract
+
+The model receives a set of translated source posts and produces one bridge-safe article.
+
+The output must contain only the final article text. The first sentence is the title and must be under 140 characters. The full output must stay under `DZEN_ARTICLE_TARGET_MAX_CHARS`. The model must not invent facts, sources, quotes, statistics, or links.
+
+If the source posts are too thin for a useful article, the model should produce a short digest instead of stretching the material.

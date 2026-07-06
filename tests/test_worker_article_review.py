@@ -1,0 +1,247 @@
+from datetime import datetime
+
+import pytest
+
+from n1_project.admin import AdminNotifier
+from n1_project.config import Settings
+from n1_project.db import QueueDatabase
+from n1_project.domain import PublishResult, SourcePost
+from n1_project.llm import TextModel
+from n1_project.worker import (
+    dzen_article_date_label,
+    generate_dzen_article,
+    process_timed_out_article_reviews,
+    should_auto_publish_dzen_article,
+)
+
+
+class ArticleModel(TextModel):
+    async def translate_post(self, source_text: str) -> str:
+        raise NotImplementedError
+
+    async def write_dzen_article(
+        self,
+        posts: list[str],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+    ) -> str:
+        return (
+            "Рынок получил несколько важных сигналов к вечеру.\n\n"
+            "Нефть, валюта и банки остались в центре внимания. "
+            "Источник сохранил короткий формат новостей, поэтому выводы здесь осторожные.\n\n"
+            "Первый блок фиксирует движение в энергетике. Второй блок показывает банковскую повестку.\n\n"
+            "Итог дня простой: инвесторам стоит следить за новыми фактами, а не за громкими версиями."
+        )
+
+
+class RetryArticleModel(TextModel):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def translate_post(self, source_text: str) -> str:
+        raise NotImplementedError
+
+    async def write_dzen_article(
+        self,
+        posts: list[str],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+    ) -> str:
+        self.calls += 1
+        if self.calls == 1:
+            return (
+                "Это слишком длинный заголовок, который специально превышает лимит Дзена и должен заставить "
+                "воркер попросить модель переписать первый sentence перед публикацией черновика.\n\n"
+                "Короткий текст."
+            )
+        assert review_note is not None
+        return (
+            "Короткий рыночный заголовок.\n\n"
+            "Второй вариант уже соблюдает лимит заголовка и сохраняет факты без лишней драматизации."
+        )
+
+
+class FakeDzenPublisher:
+    platform = "dzen"
+
+    def __init__(self) -> None:
+        self.published_texts: list[str] = []
+
+    async def publish_text(self, text: str) -> PublishResult:
+        self.published_texts.append(text)
+        return PublishResult("dzen", True, destination_id="dzen-message")
+
+
+@pytest.mark.asyncio
+async def test_generate_dzen_article_sends_pending_review(tmp_path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "ADMIN_TELEGRAM_CHAT_ID": "-100admin",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_TARGET_MIN_CHARS": "50",
+            "DZEN_ARTICLE_TARGET_MAX_CHARS": "1000",
+            "DZEN_ARTICLE_REVIEW_ENABLED": "true",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Oil is higher"))
+    db.mark_translated(row_id, "Нефть растет")
+
+    await generate_dzen_article(
+        db,
+        settings,
+        ArticleModel(),
+        AdminNotifier("token", "-100admin", dry_run=True),
+        dry_run=False,
+        force=True,
+        slot_key="2026-07-06 18:00",
+    )
+
+    article = db.article_for_slot("2026-07-06 18:00")
+    assert article is not None
+    assert article.status == "pending_review"
+    assert article.review_attempts == 1
+    assert article.review_message_id == "dry-run"
+    assert db.translated_posts_for_article() == []
+
+
+@pytest.mark.asyncio
+async def test_generate_dzen_article_retries_invalid_title(tmp_path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "ADMIN_TELEGRAM_CHAT_ID": "-100admin",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_TARGET_MIN_CHARS": "50",
+            "DZEN_ARTICLE_TARGET_MAX_CHARS": "1000",
+            "DZEN_ARTICLE_REVIEW_ENABLED": "true",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Oil is higher"))
+    db.mark_translated(row_id, "Нефть растет")
+    model = RetryArticleModel()
+
+    await generate_dzen_article(
+        db,
+        settings,
+        model,
+        AdminNotifier("token", "-100admin", dry_run=True),
+        dry_run=False,
+        force=True,
+        slot_key="2026-07-06 18:00",
+    )
+
+    article = db.article_for_slot("2026-07-06 18:00")
+    assert article is not None
+    assert article.status == "pending_review"
+    assert article.text.startswith("Короткий рыночный заголовок.")
+    assert model.calls == 2
+def test_dzen_article_auto_publish_weekends(tmp_path) -> None:
+    settings = Settings.from_mapping(
+        {"DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS": "true"},
+        project_root=tmp_path,
+    )
+
+    assert should_auto_publish_dzen_article(settings, datetime(2026, 7, 11, 18, 0)) is True
+    assert should_auto_publish_dzen_article(settings, datetime(2026, 7, 6, 18, 0)) is False
+
+    disabled = Settings.from_mapping(
+        {"DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS": "false"},
+        project_root=tmp_path,
+    )
+    assert should_auto_publish_dzen_article(disabled, datetime(2026, 7, 11, 18, 0)) is False
+
+
+def test_dzen_article_date_label_uses_slot_date(tmp_path) -> None:
+    settings = Settings.from_mapping({}, project_root=tmp_path)
+
+    assert dzen_article_date_label(settings, slot_key="2026-07-06 18:00") == "6 июля 2026 года"
+
+
+@pytest.mark.asyncio
+async def test_generate_dzen_article_auto_publishes_on_weekend(tmp_path, monkeypatch) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "ADMIN_TELEGRAM_CHAT_ID": "123456789",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_TARGET_MIN_CHARS": "50",
+            "DZEN_ARTICLE_TARGET_MAX_CHARS": "1000",
+            "DZEN_ARTICLE_REVIEW_ENABLED": "true",
+            "DZEN_ARTICLE_CANDIDATE_LIMIT": "10",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Oil is higher"))
+    db.mark_translated(row_id, "РќРµС„С‚СЊ СЂР°СЃС‚РµС‚")
+    fake_publisher = FakeDzenPublisher()
+    monkeypatch.setattr("n1_project.worker.should_auto_publish_dzen_article", lambda settings: True)
+    monkeypatch.setattr("n1_project.worker.build_publishers", lambda settings, dry_run=False: {"dzen": fake_publisher})
+
+    await generate_dzen_article(
+        db,
+        settings,
+        ArticleModel(),
+        AdminNotifier("token", "123456789", dry_run=True),
+        dry_run=False,
+        force=True,
+        slot_key="2026-07-11 18:00",
+    )
+
+    article = db.article_for_slot("2026-07-11 18:00")
+    assert article is not None
+    assert article.status == "published"
+    assert article.destination_id == "dzen-message"
+    assert article.review_message_id is None
+    assert len(fake_publisher.published_texts) == 1
+    assert db.translated_posts_for_article() == []
+
+
+@pytest.mark.asyncio
+async def test_process_timed_out_article_reviews_rejects_old_pending_review(tmp_path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "ADMIN_TELEGRAM_CHAT_ID": "123456789",
+            "DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS": "3",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    article_id = db.record_article(
+        "article text",
+        "pending_review",
+        slot_key="2026-07-06 18:00",
+        review_attempts=1,
+        review_chat_id="123456789",
+        review_message_id="13",
+    )
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE articles SET updated_at = datetime('now', '-4 hours') WHERE id = ?",
+            (article_id,),
+        )
+
+    await process_timed_out_article_reviews(
+        db,
+        settings,
+        AdminNotifier("token", "123456789", dry_run=True),
+    )
+
+    article = db.article_by_id(article_id)
+    assert article is not None
+    assert article.status == "rejected_timeout"
+    assert article.error == "review timed out after 3 hours"
