@@ -83,6 +83,23 @@ def test_translation_issues_allow_multiplier_suffix_translation() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_h1_period_translation() -> None:
+    source = (
+        "DOM RF: mortgage issuance in H1 2026 rose 48% YoY\n"
+        "VTB: mortgage issuance in Russia in H1 2026 grew 1.5x"
+    )
+    output = (
+        "\u0414\u041e\u041c.\u0420\u0424: \u0432\u044b\u0434\u0430\u0447\u0430 \u0438\u043f\u043e\u0442\u0435\u043a\u0438 "
+        "\u0432 1 \u043f\u043e\u043b\u0443\u0433\u043e\u0434\u0438\u0438 2026 \u0433\u043e\u0434\u0430 "
+        "\u0432\u044b\u0440\u043e\u0441\u043b\u0430 \u043d\u0430 48% \u0433/\u0433\n"
+        "\u0412\u0422\u0411: \u0432\u044b\u0434\u0430\u0447\u0430 \u0438\u043f\u043e\u0442\u0435\u043a\u0438 "
+        "\u0432 \u0420\u043e\u0441\u0441\u0438\u0438 \u0432 1 \u043f\u043e\u043b\u0443\u0433\u043e\u0434\u0438\u0438 "
+        "2026 \u0433\u043e\u0434\u0430 \u0432\u044b\u0440\u043e\u0441\u043b\u0430 \u0432 1,5 \u0440\u0430\u0437\u0430"
+    )
+
+    assert translation_issues(source, output) == []
+
+
 def test_structure_issues_detect_line_count_and_leading_emoji_changes() -> None:
     source = "\U0001f6e2\ufe0f Qatar\n- BBG"
     output = "Qatar \U0001f6e2\ufe0f - BBG"

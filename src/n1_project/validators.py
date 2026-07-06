@@ -6,6 +6,7 @@ URL_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
 NUMBER_RE = re.compile(
     r"(?<![\w.])(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?:%|[xX])?(?!\w)"
 )
+PERIOD_NUMBER_RE = re.compile(r"\b[HQ]([1-4])\b", re.IGNORECASE)
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
 LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
@@ -49,7 +50,9 @@ def extract_urls(text: str) -> set[str]:
 
 
 def extract_numbers(text: str) -> set[str]:
-    return set(NUMBER_RE.findall(text))
+    numbers = set(NUMBER_RE.findall(text))
+    numbers.update(PERIOD_NUMBER_RE.findall(text))
+    return numbers
 
 
 def normalize_number_token(value: str) -> str:
