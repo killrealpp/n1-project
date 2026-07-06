@@ -7,6 +7,8 @@ import httpx
 from n1_project.config import Settings
 
 
+OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
+
 TRANSLATION_SYSTEM_PROMPT = (
     "You are a strict English-to-Russian translator. "
     "Translate only the source text. Do not edit, expand, summarize, decorate, or rewrite it as social copy."
@@ -129,6 +131,8 @@ class TextModel(ABC):
 
 
 class OllamaTextModel(TextModel):
+    """Legacy local fallback. Production uses OpenRouter unless env opts back into Ollama."""
+
     def __init__(self, settings: Settings, timeout: float = 120.0):
         self.settings = settings
         self.timeout = timeout
@@ -223,22 +227,71 @@ class OpenRouterArticleModel(TextModel):
             ],
             "temperature": 0.35,
         }
+        return await self._openrouter_chat(payload)
+
+    async def _openrouter_chat(self, payload: dict[str, object]) -> str:
         headers = {
             "Authorization": f"Bearer {self.settings.openrouter_api_key}",
             "Content-Type": "application/json",
         }
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                json=payload,
-                headers=headers,
-            )
+            response = await client.post(OPENROUTER_CHAT_COMPLETIONS_URL, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
         try:
             return str(data["choices"][0]["message"]["content"]).strip()
         except (KeyError, IndexError) as exc:
             raise RuntimeError(f"Unexpected OpenRouter response keys: {sorted(data.keys())}") from exc
+
+
+class OpenRouterTranslationModel(TextModel):
+    def __init__(self, settings: Settings, article_model: TextModel, timeout: float = 120.0):
+        self.settings = settings
+        self.article_model = article_model
+        self.timeout = timeout
+
+    async def translate_post(self, source_text: str) -> str:
+        if not self.settings.openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is empty")
+        if not self.settings.openrouter_translation_model:
+            raise RuntimeError("OPENROUTER_TRANSLATION_MODEL is empty")
+
+        payload = {
+            "model": self.settings.openrouter_translation_model,
+            "messages": [
+                {"role": "system", "content": TRANSLATION_SYSTEM_PROMPT},
+                {"role": "user", "content": translation_user_prompt(source_text)},
+            ],
+            "temperature": 0.0,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.settings.openrouter_api_key}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(OPENROUTER_CHAT_COMPLETIONS_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+        try:
+            return str(data["choices"][0]["message"]["content"]).strip()
+        except (KeyError, IndexError) as exc:
+            raise RuntimeError(f"Unexpected OpenRouter response keys: {sorted(data.keys())}") from exc
+
+    async def write_dzen_article(
+        self,
+        posts: list[str],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+    ) -> str:
+        return await self.article_model.write_dzen_article(
+            posts,
+            min_chars=min_chars,
+            max_chars=max_chars,
+            review_note=review_note,
+            article_date_label=article_date_label,
+        )
 
 
 class DryRunTextModel(TextModel):
@@ -264,7 +317,26 @@ def build_text_model(settings: Settings, dry_run: bool = False) -> TextModel:
     if dry_run:
         return DryRunTextModel()
 
-    ollama = OllamaTextModel(settings)
+    ollama: OllamaTextModel | None = None
+
+    def get_ollama() -> OllamaTextModel:
+        nonlocal ollama
+        if ollama is None:
+            ollama = OllamaTextModel(settings)
+        return ollama
+
     if settings.article_llm_provider == "openrouter":
-        return OpenRouterArticleModel(settings, fallback=ollama)
-    return ollama
+        article_model: TextModel = OpenRouterArticleModel(
+            settings,
+            fallback=None if settings.translation_provider == "openrouter" else get_ollama(),
+        )
+    elif settings.article_llm_provider == "ollama":
+        article_model = get_ollama()
+    else:
+        raise ValueError(f"Unsupported ARTICLE_LLM_PROVIDER: {settings.article_llm_provider}")
+
+    if settings.translation_provider == "openrouter":
+        return OpenRouterTranslationModel(settings, article_model=article_model)
+    if settings.translation_provider != "ollama":
+        raise ValueError(f"Unsupported TRANSLATION_PROVIDER: {settings.translation_provider}")
+    return article_model

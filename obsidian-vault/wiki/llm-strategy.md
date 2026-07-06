@@ -1,34 +1,32 @@
 # LLM Strategy
 
-Use local Llama through Ollama for translation. Use OpenRouter as the quality-first option for Dzen article generation when `ARTICLE_LLM_PROVIDER=openrouter`.
+Use OpenRouter for production translation and Dzen article generation.
 
 ## Decisions
 
-- Translation stays local.
-- Article generation can use OpenRouter for better Dzen drafts.
-- OpenRouter should be used only for daily articles, not high-volume short-post translation.
+- Short-post translation uses `TRANSLATION_PROVIDER=openrouter`.
+- Dzen article generation uses `ARTICLE_LLM_PROVIDER=openrouter`.
+- The recommended translation model is `openai/gpt-4.1-mini`.
+- The recommended article model is `openai/gpt-4.1`.
+- Ollama/local LLM is no longer part of the server deployment because the current 2 GB VDS killed `llama3.1:8b` with OOM.
 - Model files are runtime dependencies and should not be committed.
-
-## Local Development
-
-Install Ollama and pull the configured model:
-
-    ollama pull llama3.1:8b
-
-The app should call `OLLAMA_BASE_URL`, usually `http://localhost:11434`.
 
 ## Server Deployment
 
-Install Ollama on the server, pull the same model, copy `.env` secrets, and run the same service. If the server needs a dedicated model disk, set `OLLAMA_MODELS` outside the repository.
+The server `.env` should contain:
 
-## Article Generation
-
-Recommended OpenRouter article settings:
-
+    LLM_PROVIDER=openrouter
+    TRANSLATION_PROVIDER=openrouter
     ARTICLE_LLM_PROVIDER=openrouter
+    OPENROUTER_API_KEY=<real_openrouter_key>
+    OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini
     OPENROUTER_ARTICLE_MODEL=openai/gpt-4.1
 
-Dzen article drafts should first go to Telegram admin review. Accept publishes to the Dzen bridge; reject generates a new draft from the same source posts with an editor note.
+`python -m n1_project.worker --doctor` should report `ollama_required=false` and `ollama.skipped=true`.
+
+## Legacy Local Fallback
+
+Ollama adapters remain in code only as a fallback for future experiments on a larger machine. They should stay disabled unless the env explicitly sets one of the providers to `ollama`.
 
 ## Related
 

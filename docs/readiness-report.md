@@ -4,10 +4,10 @@ Checked on 2026-07-06.
 
 ## Summary
 
-The project is code-ready for GitHub and server deployment, with two known runtime caveats:
+The project is code-ready for GitHub and server deployment, with one known platform caveat:
 
 - MAX publishing is still disabled until `MAX_CHAT_ID` is filled and tested.
-- On the current Windows machine, Ollama is not available in PATH right now, so local translation runtime is not currently ready. Server deployment instructions include Ollama installation and model pull.
+- OpenRouter is the production LLM path: `TRANSLATION_PROVIDER=openrouter` and `ARTICLE_LLM_PROVIDER=openrouter`. Ollama is not required.
 
 ## Verified Locally
 
@@ -21,12 +21,12 @@ Commands run from `D:\AI\n1_project`:
 
 Results:
 
-- `python -m pytest`: 51 passed.
+- `python -m pytest`: 53 passed.
 - `python -m compileall -q src tests`: completed without output.
 - `.env`, `data/`, `logs/`, `models/`, and `.pytest_cache/` are ignored by git.
 - Secret scan found only placeholder/example values in commit-ready files.
-- `--doctor` confirmed configured Telegram target, Telegram MTProto session format, VK, Dzen bridge, Dzen article review, OpenRouter article model, and daily Dzen schedule.
-- `--doctor` reported `ollama.ok=false` locally because Ollama is not currently available/running.
+- `--doctor` confirmed configured Telegram target, Telegram MTProto session format, VK, Dzen bridge, Dzen article review, OpenRouter translation/article models, and daily Dzen schedule.
+- When both translation and article providers use OpenRouter, `--doctor` skips Ollama health checks.
 - `--doctor` reported `max_ready=false` because `MAX_CHAT_ID` is not filled.
 
 ## GitHub Readiness
@@ -66,6 +66,7 @@ Ready:
 - VK publishing.
 - Dzen bridge publishing.
 - Dzen article review with accept/reject buttons.
+- Translation through OpenRouter for short posts.
 - Article generation through OpenRouter for Dzen drafts.
 - Daily Dzen schedule at `18:00`.
 - Weekend Dzen auto-publishing.
@@ -73,7 +74,6 @@ Ready:
 
 Needs action:
 
-- Install/start Ollama on the server and pull `llama3.1:8b`.
 - Fill server `.env` with real secrets.
 - Keep `PUBLISH_ORDER=vk,telegram` until MAX is configured.
 - Fill and test `MAX_CHAT_ID` before changing to `vk,max,telegram`.

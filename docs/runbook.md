@@ -48,9 +48,9 @@ This calls the configured LLM unless the text is already translated manually:
 
 The dry-run result shows the prepared short post and the payloads that would go to platforms in `PUBLISH_ORDER`.
 
-## Manual Review Workflow Without Ollama
+## Manual Review Workflow Without LLM Calls
 
-This is the safest way to test publishing while Ollama is not installed.
+This is the safest way to test publishing without calling OpenRouter.
 
 Ingest one source row without calling the LLM:
 
@@ -70,9 +70,14 @@ Publish one translated row for real:
 
 If a row is not translated yet, `--publish-row` prints a clear non-publishable error and does not call platform APIs.
 
-## Row Translation With Ollama
+## Row Translation
 
-After Ollama is installed and `python -m n1_project.worker --doctor` reports the model as available, translate one queued source row:
+On small servers, use external translation:
+
+    TRANSLATION_PROVIDER=openrouter
+    OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini
+
+Then translate one queued source row:
 
     python -m n1_project.worker --translate-row 1
 
@@ -80,7 +85,7 @@ If a row is already translated and you deliberately want to overwrite it:
 
     python -m n1_project.worker --translate-row 1 --force-translate
 
-Preview the translation call shape without saving a row or calling Ollama:
+Preview the translation call shape without saving a row or calling OpenRouter:
 
     python -m n1_project.worker --translate-row 1 --dry-run
 
@@ -96,7 +101,7 @@ After the MTProto session is ready:
 
     python -m n1_project.worker --once --fetch-latest --dry-run
 
-Remove `--dry-run` only when the payloads look correct and Ollama is running.
+Remove `--dry-run` only when the payloads look correct and OpenRouter is configured.
 
 ## Fetch Public Preview During Development
 
@@ -142,7 +147,7 @@ Show recent queued messages:
 
 ## Doctor
 
-Check env readiness and local Ollama API availability:
+Check env readiness and LLM provider readiness:
 
     python -m n1_project.worker --doctor
 
@@ -162,13 +167,13 @@ Show the Dzen article prompt from translated queued posts:
 
 ## Retry Failed Rows
 
-If a temporary local problem puts rows into `failed_translation` or `failed_retry`, move them back to retryable states:
+If a temporary provider or platform problem puts rows into `failed_translation` or `failed_retry`, move them back to retryable states:
 
     python -m n1_project.worker --reset-failed
 
-## Run Ollama
+## Legacy: Run Ollama
 
-Install Ollama and pull the configured model. On Windows, install it from https://ollama.com/download or with winget:
+Ollama is no longer part of the recommended setup. Keep it disabled on the current server. Install it only for deliberate local experiments or a larger future server. On Windows, install it from https://ollama.com/download or with winget:
 
     winget install --id Ollama.Ollama -e --accept-package-agreements --accept-source-agreements
 
@@ -226,13 +231,16 @@ If there is no response within `DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS`, the draft is
 
 The worker stores the Telegram update offset in SQLite, so callback processing survives restarts. If a generated draft fails validation or publishing, the worker sends an admin notification.
 
-Recommended article model through OpenRouter:
+Recommended OpenRouter settings:
 
+    LLM_PROVIDER=openrouter
+    TRANSLATION_PROVIDER=openrouter
     ARTICLE_LLM_PROVIDER=openrouter
     OPENROUTER_API_KEY=...
+    OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini
     OPENROUTER_ARTICLE_MODEL=openai/gpt-4.1
 
-Short-post translation still uses the local Ollama translation model.
+Short-post translation and Dzen article generation should both use OpenRouter in production.
 
 ## Admin Notifications
 

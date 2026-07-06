@@ -151,3 +151,15 @@ Refined the article prompt so the first sentence is a specific, truthful headlin
 ## [2026-07-06] deployment | Server readiness preparation
 
 Prepared the repository for GitHub and server deployment. Added `README.md`, `docs/server-deploy.md`, `docs/readiness-report.md`, and `deploy/n1-worker.service.example`. Sanitized commit-ready files so the real admin Telegram user id remains only in ignored `.env`. Verified `python -m pytest` passes 51 tests and `python -m compileall -q src tests` succeeds. Git ignore checks confirm `.env`, SQLite data, logs, model files, and cache folders are ignored. Current runtime caveats: local Ollama is not available in PATH during this audit, and MAX still needs `MAX_CHAT_ID`.
+
+## [2026-07-06] fix | External translation for small VDS
+
+The server has about 2 GB RAM and Ollama killed `llama3.1:8b` with `oom-kill` while loading the model. Added `TRANSLATION_PROVIDER=openrouter` and `OPENROUTER_TRANSLATION_MODEL` so short-post translation can run externally through OpenRouter while Dzen articles continue using `ARTICLE_LLM_PROVIDER=openrouter`. `--doctor` now skips Ollama checks when both translation and article providers are external. Verified `python -m pytest` passes 52 tests and `python -m compileall -q src tests` succeeds.
+
+## [2026-07-06] decision | OpenRouter-only production LLM
+
+The project now treats OpenRouter as the production LLM path for both translation and Dzen article generation. Defaults changed to `LLM_PROVIDER=openrouter`, `TRANSLATION_PROVIDER=openrouter`, and `ARTICLE_LLM_PROVIDER=openrouter`; `.env.example` no longer requires Ollama settings; `build_text_model` creates an Ollama client only if an env explicitly opts back into `ollama`; server docs now include removing Ollama and running the worker through `screen`. Also repaired mojibake in the Dzen article date-frame prompt. Verified `python -m pytest` passes 53 tests, `python -m compileall -q src tests` succeeds, and `python -m n1_project.worker --doctor` reports `ollama_required=false` and `ollama.skipped=true`.
+
+## [2026-07-06] config | Local env aligned to OpenRouter
+
+Updated the ignored local `.env` so `LLM_PROVIDER`, `TRANSLATION_PROVIDER`, and `ARTICLE_LLM_PROVIDER` all use `openrouter`, with `openai/gpt-4.1-mini` for translation and `openai/gpt-4.1` for Dzen articles. Secrets were preserved and not printed. `python -m n1_project.worker --doctor` confirms `openrouter_ready=true`, `ollama_required=false`, and `ollama.skipped=true`.

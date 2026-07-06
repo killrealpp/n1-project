@@ -28,6 +28,8 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS=4",
                 "DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS=3",
                 "DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true",
+                "TRANSLATION_PROVIDER=openrouter",
+                "OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini",
                 "SOCIAL_POST_MAX_LINES=2",
                 "SOCIAL_POST_TARGET_MAX_CHARS=500",
                 "PUBLISH_ORDER=vk, telegram",
@@ -55,6 +57,18 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
     assert settings.dzen_article_review_max_attempts == 4
     assert settings.dzen_article_review_timeout_hours == 3
     assert settings.dzen_article_auto_publish_weekends is True
+    assert settings.translation_provider == "openrouter"
+    assert settings.openrouter_translation_model == "openai/gpt-4.1-mini"
     assert settings.social_post_max_lines == 2
     assert settings.social_post_target_max_chars == 500
     assert settings.publish_order == ["vk", "telegram"]
+
+
+def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
+    settings = Settings.from_mapping({}, project_root=tmp_path)
+
+    assert settings.llm_provider == "openrouter"
+    assert settings.translation_provider == "openrouter"
+    assert settings.article_llm_provider == "openrouter"
+    assert settings.openrouter_translation_model == "openai/gpt-4.1-mini"
+    assert settings.openrouter_article_model == "openai/gpt-4.1"

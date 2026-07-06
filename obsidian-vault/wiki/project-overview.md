@@ -2,7 +2,7 @@
 
 This project automates Russian-language distribution of an English Telegram source channel.
 
-The intended flow is: read a new English Telegram post, translate it into natural Russian with a local Llama model, publish the translated text to VK, MAX, and Telegram, and later generate daily Dzen articles that are sent to the Dzen Telegram bridge chat.
+The intended flow is: read a new English Telegram post, translate it into natural Russian through OpenRouter, publish the translated text to VK, MAX, and Telegram, and generate daily Dzen articles that are sent to Telegram admin review before the Dzen bridge chat.
 
 ## Current Facts
 
@@ -11,8 +11,8 @@ The intended flow is: read a new English Telegram post, translate it into natura
 - VK text publishing works with `VK_TOKEN` and `VK_ID`.
 - MAX is not configured yet.
 - Dzen will be handled through `DZEN_TELEGRAM_BRIDGE_CHAT_ID`.
-- Local Llama through Ollama is the default LLM direction.
-- OpenRouter is optional for article writing only and disabled by default.
+- OpenRouter is the production LLM path for both short-post translation and Dzen article writing.
+- Local LLM/Ollama is no longer required on the current server.
 
 ## Related
 

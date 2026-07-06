@@ -5,10 +5,10 @@ Automation for reading English Telegram posts, translating them into Russian, pu
 ## Current Status
 
 - Telegram source reading: MTProto via Telethon.
-- Short-post translation: local Ollama model, default `llama3.1:8b`.
+- Short-post translation: OpenRouter by default through `TRANSLATION_PROVIDER=openrouter`.
 - Publishing: VK and Telegram are ready.
 - Dzen articles: daily article drafts go to Telegram admin review; accepted drafts publish through the Dzen Telegram bridge.
-- OpenRouter: optional quality-first article provider, configured through `ARTICLE_LLM_PROVIDER=openrouter`.
+- OpenRouter: production LLM path for both translation and Dzen article writing.
 - MAX: implementation exists, but production publishing waits for `MAX_CHAT_ID`.
 
 ## Local Checks

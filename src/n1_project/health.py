@@ -34,6 +34,7 @@ def mtproto_session_format(settings: Settings) -> dict[str, object]:
 def settings_health(settings: Settings) -> dict[str, object]:
     mtproto_missing = mtproto_missing_settings(settings)
     mtproto_session = mtproto_session_format(settings)
+    ollama_required = settings.translation_provider == "ollama" or settings.article_llm_provider == "ollama"
     return {
         "source_fetch_mode": settings.source_fetch_mode,
         "telegram_target_ready": bool(settings.telegram_bot_token and settings.telegram_target_chat_id),
@@ -56,9 +57,13 @@ def settings_health(settings: Settings) -> dict[str, object]:
             and settings.admin_telegram_chat_id
         ),
         "llm_provider": settings.llm_provider,
+        "translation_provider": settings.translation_provider,
         "ollama_base_url": settings.ollama_base_url,
         "ollama_translation_model": settings.ollama_translation_model,
+        "ollama_required": ollama_required,
         "article_llm_provider": settings.article_llm_provider,
+        "openrouter_ready": bool(settings.openrouter_api_key),
+        "openrouter_translation_model": settings.openrouter_translation_model,
         "openrouter_article_model": settings.openrouter_article_model,
         "publish_order": settings.publish_order,
         "dzen_daily_articles_enabled": settings.dzen_daily_articles_enabled,
@@ -95,7 +100,18 @@ async def ollama_health(settings: Settings) -> dict[str, object]:
 
 
 async def run_health_check(settings: Settings) -> dict[str, object]:
+    ollama_required = settings.translation_provider == "ollama" or settings.article_llm_provider == "ollama"
     return {
         "settings": settings_health(settings),
-        "ollama": await ollama_health(settings),
+        "ollama": await ollama_health(settings)
+        if ollama_required
+        else {
+            "ok": None,
+            "skipped": True,
+            "reason": "Ollama is not required when translation and article providers are external.",
+            "models": [],
+            "url": settings.ollama_base_url,
+            "translation_model_available": None,
+            "article_model_available": None,
+        },
     }

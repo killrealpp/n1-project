@@ -2,11 +2,11 @@
 
 This guide assumes an Ubuntu 24.04+ server. The project requires Python 3.12 or newer.
 
-Official Ollama Linux install docs currently use:
+OpenRouter is the production LLM path. The worker does not need a local LLM on the server:
 
-    curl -fsSL https://ollama.com/install.sh | sh
-
-Source: https://docs.ollama.com/linux
+    LLM_PROVIDER=openrouter
+    TRANSLATION_PROVIDER=openrouter
+    ARTICLE_LLM_PROVIDER=openrouter
 
 ## 1. Local Pre-Push Checklist
 
@@ -22,7 +22,7 @@ Expected:
 
 - tests pass;
 - compileall prints nothing;
-- `--doctor` shows Telegram MTProto, Telegram target, VK, Dzen bridge, admin review, Ollama, and OpenRouter article settings ready;
+- `--doctor` shows Telegram MTProto, Telegram target, VK, Dzen bridge, admin review, and OpenRouter settings ready;
 - `max_ready=false` is acceptable until `MAX_CHAT_ID` is filled;
 - `.env` and `data/n1_project.sqlite3` are ignored by git.
 
@@ -92,26 +92,29 @@ For production only, dev dependencies are not strictly required:
 
     sudo -u n1 .venv/bin/python -m pip install -e .
 
-## 6. Install Ollama
+## 6. Remove Local Ollama If It Was Installed
 
-Install Ollama:
+Skip this section if Ollama was never installed. On the current 2 GB VDS, remove Ollama and its model files because OpenRouter handles both translation and articles.
 
-    curl -fsSL https://ollama.com/install.sh | sh
+Stop and disable the service:
 
-Enable and start it:
+    sudo systemctl disable --now ollama || true
+    sudo rm -f /etc/systemd/system/ollama.service
+    sudo systemctl daemon-reload
 
-    sudo systemctl enable --now ollama
-    systemctl status ollama --no-pager
+Remove the binary and model data:
 
-Pull the translation model:
+    sudo rm -f /usr/local/bin/ollama
+    sudo rm -rf /usr/share/ollama
+    sudo rm -rf /root/.ollama
 
-    ollama pull llama3.1:8b
+Optionally remove the runtime user:
 
-Verify the local API:
+    sudo userdel ollama 2>/dev/null || true
 
-    curl http://localhost:11434/api/tags
+Verify:
 
-Security note: do not expose Ollama to the public internet. Keep `OLLAMA_BASE_URL=http://localhost:11434`.
+    command -v ollama || echo "ollama removed"
 
 ## 7. Configure Environment
 
@@ -159,12 +162,11 @@ Fill these values from the local working `.env`:
     DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS=3
     DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true
 
-    LLM_PROVIDER=ollama
-    OLLAMA_BASE_URL=http://localhost:11434
-    OLLAMA_TRANSLATION_MODEL=llama3.1:8b
-    OLLAMA_ARTICLE_MODEL=llama3.1:8b
+    LLM_PROVIDER=openrouter
+    TRANSLATION_PROVIDER=openrouter
     ARTICLE_LLM_PROVIDER=openrouter
     OPENROUTER_API_KEY=<real_openrouter_key>
+    OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini
     OPENROUTER_ARTICLE_MODEL=openai/gpt-4.1
 
     TELEGRAM_MAX_TEXT_CHARS=4096
@@ -202,8 +204,9 @@ Expected:
 - `dzen_bridge_ready=true`;
 - `admin_notifications_ready=true`;
 - `dzen_article_review_ready=true`;
-- `ollama.ok=true`;
-- `translation_model_available=true`;
+- `translation_provider=openrouter`;
+- `openrouter_ready=true`;
+- `ollama.skipped=true` when both translation and articles use OpenRouter;
 - `article_llm_provider=openrouter`;
 - `openrouter_article_model=openai/gpt-4.1`;
 - `max_ready=false` until `MAX_CHAT_ID` is filled.
@@ -233,43 +236,48 @@ Generate a Dzen article review draft without publishing:
 
 The draft should arrive in the personal Telegram DM configured by `ADMIN_TELEGRAM_CHAT_ID`.
 
-## 10. Install Worker As systemd Service
+## 10. Run Worker In screen
 
-Copy the service template:
+Install screen if needed:
 
-    sudo cp /opt/n1_project/deploy/n1-worker.service.example /etc/systemd/system/n1-worker.service
-    sudo systemctl daemon-reload
-    sudo systemctl enable n1-worker
+    sudo apt install -y screen
 
-Start:
+Start a named session:
 
-    sudo systemctl start n1-worker
+    cd /opt/n1_project
+    sudo -u n1 screen -S n1-worker
 
-Check:
+Inside screen, run the worker:
 
-    systemctl status n1-worker --no-pager
-    journalctl -u n1-worker -n 100 --no-pager
+    .venv/bin/python -m n1_project.worker --loop --source-mode mtproto
 
-Follow logs:
+Detach without stopping the worker:
 
-    journalctl -u n1-worker -f
+    Ctrl+A, then D
 
-Stop/restart:
+Return to the session:
 
-    sudo systemctl stop n1-worker
-    sudo systemctl restart n1-worker
+    sudo -u n1 screen -r n1-worker
+
+Stop the worker from inside screen with `Ctrl+C`, then exit the shell:
+
+    exit
+
+List sessions:
+
+    sudo -u n1 screen -ls
 
 ## 11. Updating The Server After New Pushes
 
     cd /opt/n1_project
-    sudo systemctl stop n1-worker
+    sudo -u n1 screen -S n1-worker -X quit 2>/dev/null || true
     sudo -u n1 git pull --ff-only
     sudo -u n1 .venv/bin/python -m pip install -e .
     sudo -u n1 .venv/bin/python -m pytest
     sudo -u n1 .venv/bin/python -m compileall -q src tests
     sudo -u n1 .venv/bin/python -m n1_project.worker --doctor
-    sudo systemctl start n1-worker
-    journalctl -u n1-worker -n 100 --no-pager
+    sudo -u n1 screen -dmS n1-worker bash -lc 'cd /opt/n1_project && .venv/bin/python -m n1_project.worker --loop --source-mode mtproto'
+    sudo -u n1 screen -ls
 
 ## 12. Backup And Recovery
 

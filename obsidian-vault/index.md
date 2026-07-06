@@ -8,7 +8,7 @@ This vault is the project memory for the Telegram-to-Russian publishing automati
 - [[wiki/platform-status]] - current status of Telegram, VK, MAX, and Dzen.
 - [[wiki/dzen-bridge]] - how Dzen Telegram bridge publishing works.
 - [[wiki/dzen-article-playbook]] - how to write bridge-safe Dzen articles.
-- [[wiki/llm-strategy]] - local Llama, Ollama, and optional article fallback decisions.
+- [[wiki/llm-strategy]] - OpenRouter production LLM path and legacy local fallback notes.
 - [[wiki/mtproto-session-plan]] - how to create and move a dedicated Telegram session.
 - [[wiki/source-channel-style]] - observed style of `@num1_ch` and how to adapt it.
 

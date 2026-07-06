@@ -57,6 +57,8 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-06) Updated Dzen article workflow: reviews and admin notifications go to `ADMIN_TELEGRAM_CHAT_ID`, article candidates are the latest 10 unconsidered posts, stale reviews time out after 3 hours, and weekend articles auto-publish to the Dzen bridge.
 - [x] (2026-07-06) Refined Dzen article structure: the first sentence is a truthful click-worthy headline, and the next paragraph starts with a date-frame summary such as `Сводка за 6 июля 2026 года:`.
 - [x] (2026-07-06) Prepared GitHub/server deployment artifacts: `README.md`, `docs/server-deploy.md`, `docs/readiness-report.md`, and `deploy/n1-worker.service.example`.
+- [x] (2026-07-06) Added `TRANSLATION_PROVIDER=openrouter` so small VDS servers can translate short posts without loading Ollama.
+- [x] (2026-07-06) Switched the production LLM path fully to OpenRouter: default providers are OpenRouter, `.env.example` no longer requires Ollama, `--doctor` skips Ollama, and server docs use `screen`.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -126,7 +128,7 @@ The user wants one automation system that reads new English posts from a source 
   Rationale: Translation is high-volume and repetitive; local inference reduces external cost and keeps the project portable from the user's PC to a server.
   Date/Author: 2026-07-03 / Codex.
 
-- Decision: Keep OpenRouter optional and disabled by default.
+- Superseded decision: Keep OpenRouter optional and disabled by default.
   Rationale: Article generation quality may benefit from a stronger remote model, but the MVP should first measure local Llama quality and avoid adding another paid dependency too early.
   Date/Author: 2026-07-03 / Codex.
 
@@ -150,8 +152,16 @@ The user wants one automation system that reads new English posts from a source 
   Rationale: Dzen articles have higher reputational and recommendation risk than short reposts. Human approval catches bad titles, weak first paragraphs, unsupported synthesis, and model artifacts before publication.
   Date/Author: 2026-07-06 / Codex.
 
-- Decision: Use OpenRouter only for article writing when enabled, while keeping translation local.
+- Superseded decision: Use OpenRouter only for article writing when enabled, while keeping translation local.
   Rationale: daily article volume is low and quality matters more; short-post translation is high-volume, factual, and better kept local with strict validators.
+  Date/Author: 2026-07-06 / Codex.
+
+- Decision: Use OpenRouter for short-post translation on the current 2 GB VDS.
+  Rationale: `llama3.1:8b` was killed by the OOM killer on the server, while short English-to-Russian market posts do not require a local 8B model.
+  Date/Author: 2026-07-06 / Codex.
+
+- Decision: Stop using local LLM in production and route both translation and Dzen article writing through OpenRouter.
+  Rationale: the current server lacks RAM for local Llama, OpenRouter translation cost is low for the expected volume, and the operational setup becomes simpler.
   Date/Author: 2026-07-06 / Codex.
 
 - Decision: Send Dzen article reviews and all admin notifications to `ADMIN_TELEGRAM_CHAT_ID`.
@@ -209,6 +219,8 @@ Update 2026-07-06: Dzen article review now targets the personal Telegram DM conf
 Update 2026-07-06: the article prompt now separates the headline from the date summary. The first sentence should make the reader want to open the article while staying truthful and source-grounded. The next paragraph starts with a date frame such as `Сводка за 6 июля 2026 года:` and then explains the selected cluster.
 
 Update 2026-07-06: GitHub/server deployment preparation is documented. Added a README, a server deployment guide with Ubuntu/systemd/Ollama/env commands, a readiness report, and a systemd service template. The code test suite passes 51 tests. Remaining deployment caveats are Ollama installation on the server and MAX `MAX_CHAT_ID`.
+
+Update 2026-07-06: production LLM strategy changed to OpenRouter-only. `Settings` now defaults `LLM_PROVIDER`, `TRANSLATION_PROVIDER`, and `ARTICLE_LLM_PROVIDER` to `openrouter`; `.env.example` documents OpenRouter models; `build_text_model` no longer creates an Ollama client unless an env explicitly opts into `ollama`; the article prompt contains normal Russian date-frame strings; and server instructions now remove Ollama and run the worker in `screen`. Validation: `python -m pytest` passes 53 tests, `python -m compileall -q src tests` completes, and `--doctor` reports `ollama_required=false`.
 
 ## Context and Orientation
 
@@ -271,7 +283,7 @@ Run tests:
 
 Current expected test result:
 
-    51 passed
+    52 passed
 
 Create the dedicated Telegram MTProto session after `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` are filled:
 
@@ -352,7 +364,7 @@ Current verified publishing evidence:
 Current implementation evidence:
 
     python -m pytest
-    51 passed
+    52 passed
 
     python -m compileall -q src tests
     completed without errors
@@ -482,3 +494,5 @@ Revision note 2026-07-06 / Codex: updated after adding personal-DM admin routing
 Revision note 2026-07-06 / Codex: updated after adding slot-based Russian date labels, date-frame article openings, stronger headline rules, and mojibake repair for admin callback messages.
 
 Revision note 2026-07-06 / Codex: updated after preparing GitHub/server deployment docs, sanitizing commit-ready files, checking ignored secrets/runtime data, and recording local Ollama/MAX readiness caveats.
+
+Revision note 2026-07-06 / Codex: updated after switching production LLM usage to OpenRouter-only, repairing Russian article-prompt text, and changing server operation guidance from systemd/Ollama to screen/OpenRouter.

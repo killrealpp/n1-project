@@ -2,9 +2,9 @@
 
 Telegram and VK text publishing are verified locally. MAX publishing logic is implemented and only needs final chat credentials/testing. Dzen is routed through Telegram admin review before the Telegram bridge.
 
-Manual queue review is ready. While Ollama is unavailable, a source row can be ingested with `--ingest-only`, manually marked translated with `--set-translation`, then previewed or published with `--publish-row`.
+Manual queue review is ready. A source row can be ingested with `--ingest-only`, manually marked translated with `--set-translation`, then previewed or published with `--publish-row`.
 
-Row-specific LLM translation is ready in code. After Ollama is installed, `--translate-row <id>` can translate one queued row and mark it translated; `--dry-run` checks the CLI path without saving.
+Row-specific LLM translation is ready in code. With `TRANSLATION_PROVIDER=openrouter`, `--translate-row <id>` translates one queued row through OpenRouter and marks it translated; `--dry-run` checks the CLI path without saving.
 
 ## Telegram
 
@@ -36,9 +36,9 @@ The project generates article drafts, sends them to the personal admin DM config
 
 ## LLM
 
-Status: local runtime ready for translation; OpenRouter can be used for article quality.
+Status: OpenRouter is the production LLM path.
 
-Ollama is reachable at `http://localhost:11434`, and `llama3.1:8b` is available. Real test row 1 showed that Llama can hallucinate unsupported details, so short-post translation stays strict and local with validators. Dzen article writing can use `ARTICLE_LLM_PROVIDER=openrouter` and a GPT model such as `openai/gpt-4.1`, with Telegram admin review before publishing.
+The server should use `TRANSLATION_PROVIDER=openrouter` and `ARTICLE_LLM_PROVIDER=openrouter` because `llama3.1:8b` exceeded available RAM on the 2 GB VDS. Validators remain strict regardless of provider. Dzen article writing uses a GPT model such as `openai/gpt-4.1`, with Telegram admin review before publishing.
 
 ## Related
 

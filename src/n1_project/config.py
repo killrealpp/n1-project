@@ -85,11 +85,13 @@ class Settings:
     dzen_article_auto_publish_weekends: bool
 
     llm_provider: str
+    translation_provider: str
     ollama_base_url: str
     ollama_translation_model: str
     ollama_article_model: str
     article_llm_provider: str
     openrouter_api_key: str
+    openrouter_translation_model: str
     openrouter_article_model: str
 
     telegram_max_text_chars: int
@@ -143,13 +145,18 @@ class Settings:
             dzen_article_review_max_attempts=parse_int(env.get("DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS"), 5),
             dzen_article_review_timeout_hours=parse_int(env.get("DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS"), 3),
             dzen_article_auto_publish_weekends=parse_bool(env.get("DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS"), True),
-            llm_provider=env.get("LLM_PROVIDER", "ollama").lower(),
+            llm_provider=env.get("LLM_PROVIDER", "openrouter").lower(),
+            translation_provider=env.get("TRANSLATION_PROVIDER", env.get("LLM_PROVIDER", "openrouter")).lower(),
             ollama_base_url=env.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/"),
             ollama_translation_model=env.get("OLLAMA_TRANSLATION_MODEL", "llama3.1:8b"),
             ollama_article_model=env.get("OLLAMA_ARTICLE_MODEL", "llama3.1:8b"),
-            article_llm_provider=env.get("ARTICLE_LLM_PROVIDER", "ollama").lower(),
+            article_llm_provider=env.get("ARTICLE_LLM_PROVIDER", env.get("LLM_PROVIDER", "openrouter")).lower(),
             openrouter_api_key=env.get("OPENROUTER_API_KEY", ""),
-            openrouter_article_model=env.get("OPENROUTER_ARTICLE_MODEL", ""),
+            openrouter_translation_model=env.get(
+                "OPENROUTER_TRANSLATION_MODEL",
+                env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-4.1-mini"),
+            ),
+            openrouter_article_model=env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-4.1"),
             telegram_max_text_chars=parse_int(env.get("TELEGRAM_MAX_TEXT_CHARS"), 4096),
             vk_max_text_chars=parse_int(env.get("VK_MAX_TEXT_CHARS"), 16350),
             max_max_text_chars=parse_int(env.get("MAX_MAX_TEXT_CHARS"), 4000),
