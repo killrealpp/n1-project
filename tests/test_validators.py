@@ -61,6 +61,13 @@ def test_translation_issues_allow_number_before_terminal_period() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_removed_thousands_separator() -> None:
+    source = "Net income rose to 6,400 million rubles - IF"
+    output = "\u0427\u0438\u0441\u0442\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0432\u044b\u0440\u043e\u0441\u043b\u0430 \u0434\u043e 6400 \u043c\u043b\u043d \u0440\u0443\u0431\u043b\u0435\u0439 - IF"
+
+    assert translation_issues(source, output) == []
+
+
 def test_structure_issues_detect_line_count_and_leading_emoji_changes() -> None:
     source = "\U0001f6e2\ufe0f Qatar\n- BBG"
     output = "Qatar \U0001f6e2\ufe0f - BBG"

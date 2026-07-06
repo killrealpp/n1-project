@@ -50,6 +50,37 @@ def extract_numbers(text: str) -> set[str]:
     return set(NUMBER_RE.findall(text))
 
 
+def normalize_number_token(value: str) -> str:
+    token = value.strip()
+    suffix = ""
+    if token.endswith("%"):
+        token = token[:-1]
+        suffix = "%"
+
+    token = token.replace("\u00a0", " ").replace("\u202f", " ")
+    token = re.sub(r"(?<=\d)\s+(?=\d{3}(?:\D|$))", "", token)
+
+    has_comma = "," in token
+    has_dot = "." in token
+    if has_comma and has_dot:
+        if token.rfind(".") > token.rfind(","):
+            token = token.replace(",", "")
+        else:
+            token = token.replace(".", "").replace(",", ".")
+    elif has_comma:
+        parts = token.split(",")
+        if len(parts) > 1 and all(part.isdigit() for part in parts) and all(len(part) == 3 for part in parts[1:]):
+            token = "".join(parts)
+        else:
+            token = token.replace(",", ".")
+    elif has_dot:
+        parts = token.split(".")
+        if len(parts) > 1 and all(part.isdigit() for part in parts) and all(len(part) == 3 for part in parts[1:]):
+            token = "".join(parts)
+
+    return token + suffix
+
+
 def extract_hashtags(text: str) -> set[str]:
     return set(HASHTAG_RE.findall(text))
 
@@ -78,13 +109,18 @@ def preservation_issues(source_text: str, output_text: str) -> list[str]:
     issues: list[str] = []
     for label, extractor in (
         ("url", extract_urls),
-        ("number", extract_numbers),
         ("hashtag", extract_hashtags),
         ("emoji", extract_emojis),
     ):
         missing = sorted(extractor(source_text) - extractor(output_text))
         if missing:
             issues.append(f"missing {label}s: {', '.join(missing)}")
+
+    source_numbers = extract_numbers(source_text)
+    output_number_keys = {normalize_number_token(value) for value in extract_numbers(output_text)}
+    missing_numbers = sorted(value for value in source_numbers if normalize_number_token(value) not in output_number_keys)
+    if missing_numbers:
+        issues.append(f"missing numbers: {', '.join(missing_numbers)}")
     return issues
 
 
@@ -105,13 +141,18 @@ def unexpected_addition_issues(source_text: str, output_text: str) -> list[str]:
     issues: list[str] = []
     for label, extractor in (
         ("url", extract_urls),
-        ("number", extract_numbers),
         ("hashtag", extract_hashtags),
         ("emoji", extract_emojis),
     ):
         added = sorted(extractor(output_text) - extractor(source_text))
         if added:
             issues.append(f"added {label}s: {', '.join(added)}")
+
+    source_number_keys = {normalize_number_token(value) for value in extract_numbers(source_text)}
+    output_numbers = extract_numbers(output_text)
+    added_numbers = sorted(value for value in output_numbers if normalize_number_token(value) not in source_number_keys)
+    if added_numbers:
+        issues.append(f"added numbers: {', '.join(added_numbers)}")
 
     added_attributions = sorted(extract_known_attributions(output_text) - extract_known_attributions(source_text))
     if added_attributions:

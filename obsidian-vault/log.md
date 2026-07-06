@@ -163,3 +163,7 @@ The project now treats OpenRouter as the production LLM path for both translatio
 ## [2026-07-06] config | Local env aligned to OpenRouter
 
 Updated the ignored local `.env` so `LLM_PROVIDER`, `TRANSLATION_PROVIDER`, and `ARTICLE_LLM_PROVIDER` all use `openrouter`, with `openai/gpt-4.1-mini` for translation and `openai/gpt-4.1` for Dzen articles. Secrets were preserved and not printed. `python -m n1_project.worker --doctor` confirms `openrouter_ready=true`, `ollama_required=false`, and `ollama.skipped=true`.
+
+## [2026-07-06] fix | Number normalization in translation validation
+
+Fixed translation validation so semantically equivalent thousands formatting, such as source `6,400` and output `6400`, does not fail as missing and added numbers. Added a regression test for removed thousands separators. Verified `python -m pytest tests/test_validators.py` passes 11 tests, full `python -m pytest` passes 54 tests, `python -m compileall -q src tests` succeeds, and `--doctor` still reports OpenRouter-only readiness.
