@@ -4,6 +4,7 @@ from n1_project.validators import (
     leftover_english_issue,
     normalize_vk_owner_id,
     preservation_issues,
+    source_has_translatable_english,
     structure_issues,
     translation_issues,
     unexpected_addition_issues,
@@ -95,6 +96,18 @@ def test_translation_issues_allow_h1_period_translation() -> None:
         "\u0412\u0422\u0411: \u0432\u044b\u0434\u0430\u0447\u0430 \u0438\u043f\u043e\u0442\u0435\u043a\u0438 "
         "\u0432 \u0420\u043e\u0441\u0441\u0438\u0438 \u0432 1 \u043f\u043e\u043b\u0443\u0433\u043e\u0434\u0438\u0438 "
         "2026 \u0433\u043e\u0434\u0430 \u0432\u044b\u0440\u043e\u0441\u043b\u0430 \u0432 1,5 \u0440\u0430\u0437\u0430"
+    )
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_h1_as_roman_half_year_translation() -> None:
+    source = "Russia doubled coal exports to Brazil in H1 2026 - PRIME"
+    output = (
+        "\u0420\u043e\u0441\u0441\u0438\u044f \u0443\u0434\u0432\u043e\u0438\u043b\u0430 "
+        "\u044d\u043a\u0441\u043f\u043e\u0440\u0442 \u0443\u0433\u043b\u044f \u0432 "
+        "\u0411\u0440\u0430\u0437\u0438\u043b\u0438\u044e \u0432 I "
+        "\u043f\u043e\u043b\u0443\u0433\u043e\u0434\u0438\u0438 2026 \u2014 PRIME"
     )
 
     assert translation_issues(source, output) == []
@@ -218,3 +231,8 @@ def test_leftover_english_allows_short_attributions_in_russian_text() -> None:
 
 def test_leftover_english_detects_untranslated_output() -> None:
     assert leftover_english_issue("Bitcoin is higher today") == "output has no Cyrillic text"
+
+
+def test_source_has_translatable_english_ignores_hashtag_only_signal() -> None:
+    assert source_has_translatable_english("\U0001f1f7\U0001f1fa\U0001f4c9 #188") is False
+    assert source_has_translatable_english("VTB NET PROFIT UNDER IFRS FELL 2.5X") is True

@@ -21,7 +21,12 @@ from n1_project.publishers import build_publishers
 from n1_project.scheduler import current_slot, local_now
 from n1_project.telegram_public_preview import fetch_public_preview_posts
 from n1_project.telegram_source import TelegramSource
-from n1_project.validators import format_dzen_article_text, translation_issues, validate_dzen_bridge_article
+from n1_project.validators import (
+    format_dzen_article_text,
+    source_has_translatable_english,
+    translation_issues,
+    validate_dzen_bridge_article,
+)
 
 
 def configure_logging(level: str) -> None:
@@ -79,6 +84,12 @@ async def ingest_public_preview(db: QueueDatabase, settings: Settings, limit: in
         logging.info("no text posts found in public preview for @%s", channel_name)
 
 
+async def translate_source_text(model: TextModel, source_text: str) -> str:
+    if not source_has_translatable_english(source_text):
+        return source_text
+    return await model.translate_post(source_text)
+
+
 async def translate_pending(
     db: QueueDatabase,
     settings: Settings,
@@ -90,7 +101,7 @@ async def translate_pending(
     for message in db.messages_for_translation(limit=limit, max_attempts=settings.translation_max_attempts):
         try:
             translated = prepare_social_post_text(
-                await model.translate_post(message.source_text),
+                await translate_source_text(model, message.source_text),
                 max_lines=settings.social_post_max_lines,
                 target_max_chars=settings.social_post_target_max_chars,
             )
@@ -140,7 +151,7 @@ async def translate_one_row(
 
     try:
         translated = prepare_social_post_text(
-            await model.translate_post(message.source_text),
+            await translate_source_text(model, message.source_text),
             max_lines=settings.social_post_max_lines,
             target_max_chars=settings.social_post_target_max_chars,
         )
@@ -999,7 +1010,7 @@ async def amain() -> None:
 
     if args.dry_run and args.source_text:
         translated = prepare_social_post_text(
-            await model.translate_post(args.source_text),
+            await translate_source_text(model, args.source_text),
             max_lines=settings.social_post_max_lines,
             target_max_chars=settings.social_post_target_max_chars,
         )

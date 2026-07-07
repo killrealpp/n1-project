@@ -25,6 +25,20 @@ RU_PERIOD_WORD_PATTERNS = {
         r"\bчетверт(?:ый|ого|ому|ым|ом|ая|ую|ое|ом)\s+(?:квартал|квартале|квартала|кварталу|кварталом)\b",
     ),
 }
+ROMAN_PERIOD_PATTERNS = {
+    "1": (
+        r"\bI\s+(?:квартал|квартале|квартала|кварталу|кварталом|полугодие|полугодии|полугодия|полугодию|полугодием)\b",
+    ),
+    "2": (
+        r"\bII\s+(?:квартал|квартале|квартала|кварталу|кварталом|полугодие|полугодии|полугодия|полугодию|полугодием)\b",
+    ),
+    "3": (
+        r"\bIII\s+(?:квартал|квартале|квартала|кварталу|кварталом)\b",
+    ),
+    "4": (
+        r"\bIV\s+(?:квартал|квартале|квартала|кварталу|кварталом)\b",
+    ),
+}
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
 LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
@@ -85,6 +99,9 @@ def extract_numbers(text: str) -> set[str]:
     numbers.update(PERIOD_NUMBER_RE.findall(text))
     normalized = text.lower()
     for value, patterns in RU_PERIOD_WORD_PATTERNS.items():
+        if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
+            numbers.add(value)
+    for value, patterns in ROMAN_PERIOD_PATTERNS.items():
         if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
             numbers.add(value)
     return numbers
@@ -340,6 +357,16 @@ def source_is_symbol_only(source_text: str) -> bool:
     cleaned = HASHTAG_RE.sub(" ", cleaned)
     words = LATIN_WORD_RE.findall(cleaned)
     return bool(words) and all(is_market_symbol_word(word) for word in words)
+
+
+def source_has_translatable_english(source_text: str) -> bool:
+    cleaned = URL_RE.sub(" ", source_text)
+    cleaned = HASHTAG_RE.sub(" ", cleaned)
+    for word in LATIN_WORD_RE.findall(cleaned):
+        if is_market_symbol_word(word):
+            continue
+        return True
+    return False
 
 
 def leftover_english_issue_for_translation(source_text: str, output_text: str) -> str | None:

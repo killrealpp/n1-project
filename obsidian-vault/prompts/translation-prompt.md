@@ -21,6 +21,8 @@ Rules:
 - Do not add or remove hashtags, emojis, links, source names, numbers, percentages, share sizes, tickers, or dates.
 - Do not add blank lines that were not present in the source.
 - Do not repeat an ALL-CAPS source line in a second rewritten form; translate it once in the same position.
+- If the source contains no English words that need translation, return the source text unchanged.
+- Never return `None`, `null`, an empty response, or a placeholder.
 - Do not add context, explanations, commentary, warnings, conclusions, titles, or disclaimers.
 - Do not invent sources. If the source has no attribution, the translation must have no attribution.
 - Do not make the text more promotional, emotional, or analytical than the source.

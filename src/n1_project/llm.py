@@ -34,6 +34,8 @@ def translation_user_prompt(source_text: str) -> str:
         "- Do not add or remove hashtags, emojis, links, source names, numbers, percentages, share sizes, tickers, or dates.\n"
         "- Do not add blank lines that were not present in the source.\n"
         "- Do not repeat an ALL-CAPS source line in a second rewritten form; translate it once in the same position.\n"
+        "- If the source contains no English words that need translation, return the source text unchanged.\n"
+        "- Never return `None`, `null`, an empty response, or a placeholder.\n"
         "- Do not add context, explanations, commentary, warnings, conclusions, titles, or disclaimers.\n"
         "- Do not invent sources. If the source has no attribution, the translation must have no attribution.\n"
         "- Do not make the text more promotional, emotional, or analytical than the source.\n"

@@ -9,6 +9,8 @@ def test_translation_prompt_requests_strict_literal_translation() -> None:
     assert "If the source starts with an emoji or flag" in prompt
     assert "Translate each source line exactly once" in prompt
     assert "Do not add blank lines" in prompt
+    assert "return the source text unchanged" in prompt
+    assert "Never return `None`" in prompt
     assert "Do not invent sources" in prompt
     assert "Return only the translated post text" in prompt
 
