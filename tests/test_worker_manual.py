@@ -6,7 +6,7 @@ from n1_project.config import Settings
 from n1_project.db import QueueDatabase
 from n1_project.domain import SourcePost
 from n1_project.llm import TextModel
-from n1_project.worker import set_translation_from_cli, translate_one_row
+from n1_project.worker import exception_report, set_translation_from_cli, translate_one_row
 
 
 class FakeTextModel(TextModel):
@@ -26,6 +26,20 @@ class FakeTextModel(TextModel):
         article_date_label: str | None = None,
     ) -> str:
         raise NotImplementedError
+
+
+def test_exception_report_includes_traceback_details() -> None:
+    def raise_error() -> None:
+        raise RuntimeError("boom")
+
+    try:
+        raise_error()
+    except RuntimeError as exc:
+        report = exception_report(exc)
+
+    assert "type=RuntimeError" in report
+    assert "error=boom" in report
+    assert "raise_error" in report
 
 
 def test_set_translation_from_cli_preserves_lines(tmp_path: Path, capsys) -> None:

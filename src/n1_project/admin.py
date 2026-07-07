@@ -94,9 +94,13 @@ class AdminNotifier:
         if offset is not None:
             payload["offset"] = offset
         url = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
-            data = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logging.warning("admin getUpdates request failed: %s", exc)
+            return []
         if not data.get("ok"):
             logging.warning("admin getUpdates failed: %s", data)
             return []

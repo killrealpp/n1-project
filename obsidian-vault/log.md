@@ -199,3 +199,11 @@ Verified the current OpenRouter slug for GPT-5.3 Chat is `openai/gpt-5.3-chat` a
 ## [2026-07-07] fix | Q2 period-word translation validation
 
 Investigated server row `1833`, where the source post used `Q2 2026` and DeepSeek translated it naturally as `во втором квартале 2026 года`, causing a false `missing numbers: 2` validation error. Added Russian period-word normalization for `первый/второй/третий/четвертый квартал` and `первое/второе полугодие`, so compact source periods such as `Q2` can match Russian ordinal period wording. Also strengthened the translation prompt to translate each source line exactly once and avoid added leads, blank lines, titles, summaries, or duplicate paraphrases. Verified targeted validator/prompt tests pass 25 cases, a direct Samsung/Q2 validation check returns `[]`, full `python -m pytest` passes 65 tests, `python -m compileall -q src tests` succeeds, and `git diff --check` reports no whitespace errors.
+
+## [2026-07-07] fix | Worker pass failure diagnostics
+
+The generic admin alert `Worker pass failed / See local logs for stack trace` did not include the actual exception. Added `exception_report()` and changed the worker-loop catch block to send the exception type, message, and a trimmed traceback in future admin notifications. Added a focused test for traceback reporting. Verified `python -m pytest tests/test_worker_manual.py -q` passes 5 tests, full `python -m pytest -q` passes 66 tests, and `python -m compileall -q src tests` succeeds.
+
+## [2026-07-07] fix | Admin getUpdates timeout resilience
+
+Investigated a `Worker pass failed` stack trace caused by `httpx.ConnectTimeout` while polling Telegram Bot API `getUpdates` for Dzen review callbacks. Callback polling is auxiliary and should not block ingestion, translation, or publishing, so `AdminNotifier.get_callback_updates()` now catches `httpx.HTTPError` and JSON decode errors, logs a warning, and returns an empty update list for that pass. Added a regression test for `ConnectTimeout`. Verified `python -m pytest tests/test_admin.py -q` passes 3 tests, full `python -m pytest -q` passes 67 tests, and `python -m compileall -q src tests` succeeds.

@@ -1,4 +1,5 @@
 import pytest
+import httpx
 
 from n1_project.admin import ARTICLE_ACCEPT_PREFIX, ARTICLE_REJECT_PREFIX, AdminNotifier, repair_mojibake
 
@@ -26,3 +27,26 @@ async def test_admin_review_dry_run_payload() -> None:
 def test_repair_mojibake() -> None:
     assert repair_mojibake("РџСЂРёРЅСЏС‚Рѕ. РћС‚РїСЂР°РІР»РµРЅРѕ РІ Dzen.") == "Принято. Отправлено в Dzen."
     assert repair_mojibake("Принято. Отправлено в Dzen.") == "Принято. Отправлено в Dzen."
+
+@pytest.mark.asyncio
+async def test_get_callback_updates_timeout_returns_empty_list(monkeypatch, caplog) -> None:
+    class TimeoutClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            raise httpx.ConnectTimeout("connect timed out")
+
+    monkeypatch.setattr(httpx, "AsyncClient", TimeoutClient)
+    admin = AdminNotifier("token", "-100admin")
+
+    updates = await admin.get_callback_updates(offset=123)
+
+    assert updates == []
+    assert "admin getUpdates request failed" in caplog.text

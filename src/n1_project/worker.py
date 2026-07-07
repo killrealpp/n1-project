@@ -6,6 +6,7 @@ import json
 import logging
 import sys
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -298,6 +299,13 @@ def translation_validation_error(issues: list[str], translated: str) -> str:
     if len(output) > 500:
         output = output[:497] + "..."
     return f"{'; '.join(issues)} | output={output}"
+
+
+def exception_report(exc: Exception, *, max_chars: int = 3000) -> str:
+    trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).strip()
+    if len(trace) > max_chars:
+        trace = "[trimmed]\n" + trace[-max_chars:]
+    return f"type={type(exc).__name__}\nerror={exc}\n\n{trace}"
 
 
 RU_MONTH_NAMES = (
@@ -1114,9 +1122,9 @@ async def amain() -> None:
                 )
             except KeyboardInterrupt:
                 raise
-            except Exception:
+            except Exception as exc:
                 logging.exception("worker pass failed")
-                await notify_admin(admin, "Worker pass failed", "See local logs for stack trace.")
+                await notify_admin(admin, "Worker pass failed", exception_report(exc))
             await asyncio.sleep(settings.worker_poll_seconds)
     else:
         await run_processing_pass(
