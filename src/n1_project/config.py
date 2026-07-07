@@ -84,6 +84,7 @@ class Settings:
 
     admin_telegram_chat_id: str
     admin_notifications_enabled: bool
+    admin_callback_poll_timeout_seconds: int
 
     dzen_telegram_bridge_chat_id: str
     dzen_daily_articles_enabled: bool
@@ -149,6 +150,7 @@ class Settings:
             max_ca_bundle=resolve_optional_path(env.get("MAX_CA_BUNDLE"), root),
             admin_telegram_chat_id=env.get("ADMIN_TELEGRAM_CHAT_ID", env.get("TELEGRAM_TARGET_CHAT_ID", "")),
             admin_notifications_enabled=parse_bool(env.get("ADMIN_NOTIFICATIONS_ENABLED"), True),
+            admin_callback_poll_timeout_seconds=parse_int(env.get("ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS"), 25),
             dzen_telegram_bridge_chat_id=env.get("DZEN_TELEGRAM_BRIDGE_CHAT_ID", ""),
             dzen_daily_articles_enabled=parse_bool(env.get("DZEN_DAILY_ARTICLES_ENABLED")),
             dzen_daily_article_times=parse_csv(env.get("DZEN_DAILY_ARTICLE_TIMES")),

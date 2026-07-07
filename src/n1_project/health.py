@@ -52,6 +52,7 @@ def settings_health(settings: Settings) -> dict[str, object]:
             and settings.telegram_bot_token
             and settings.admin_telegram_chat_id
         ),
+        "admin_callback_poll_timeout_seconds": settings.admin_callback_poll_timeout_seconds,
         "dzen_bridge_ready": bool(settings.telegram_bot_token and settings.dzen_telegram_bridge_chat_id),
         "dzen_article_review_enabled": settings.dzen_article_review_enabled,
         "dzen_article_review_ready": bool(

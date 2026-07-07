@@ -8,6 +8,7 @@ from n1_project.db import QueueDatabase
 from n1_project.domain import PublishResult, SourcePost
 from n1_project.llm import TextModel
 from n1_project.worker import (
+    approve_article_from_cli,
     dzen_article_date_label,
     generate_dzen_article,
     process_timed_out_article_reviews,
@@ -207,6 +208,38 @@ async def test_generate_dzen_article_auto_publishes_on_weekend(tmp_path, monkeyp
     assert article.review_message_id is None
     assert len(fake_publisher.published_texts) == 1
     assert db.translated_posts_for_article() == []
+
+
+@pytest.mark.asyncio
+async def test_approve_article_from_cli_publishes_pending_review(tmp_path, monkeypatch, capsys) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    article_id = db.record_article("Market title.\n\nBody text.", "pending_review", review_attempts=1)
+    fake_publisher = FakeDzenPublisher()
+    monkeypatch.setattr("n1_project.worker.build_publishers", lambda settings, dry_run=False: {"dzen": fake_publisher})
+
+    await approve_article_from_cli(
+        db,
+        settings,
+        AdminNotifier("token", "123456789", dry_run=True),
+        article_id,
+        dry_run=False,
+    )
+
+    output = capsys.readouterr().out
+    article = db.article_by_id(article_id)
+    assert '"ok": true' in output
+    assert article is not None
+    assert article.status == "published"
+    assert article.destination_id == "dzen-message"
+    assert fake_publisher.published_texts == ["Market title.\n\nBody text."]
 
 
 @pytest.mark.asyncio

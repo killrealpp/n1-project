@@ -14,6 +14,7 @@ def test_settings_health_flags(tmp_path: Path) -> None:
             "VK_ID": "123",
             "MAX_CA_BUNDLE": "certs/max.pem",
             "ADMIN_TELEGRAM_CHAT_ID": "-300",
+            "ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS": "17",
             "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-200",
             "DZEN_DAILY_ARTICLES_ENABLED": "true",
         },
@@ -37,6 +38,7 @@ def test_settings_health_flags(tmp_path: Path) -> None:
     assert health["max_ca_bundle_configured"] is True
     assert health["max_ca_bundle"] == str(tmp_path / "certs" / "max.pem")
     assert health["admin_notifications_ready"] is True
+    assert health["admin_callback_poll_timeout_seconds"] == 17
     assert health["dzen_bridge_ready"] is True
     assert health["dzen_article_review_ready"] is True
     assert health["dzen_daily_articles_enabled"] is True

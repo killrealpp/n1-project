@@ -85,17 +85,18 @@ class AdminNotifier:
             reply_markup=reply_markup,
         )
 
-    async def get_callback_updates(self, offset: int | None) -> list[dict[str, Any]]:
+    async def get_callback_updates(self, offset: int | None, timeout_seconds: int = 0) -> list[dict[str, Any]]:
         if not self.configured:
             return []
         if self.dry_run:
             return []
-        payload: dict[str, object] = {"timeout": 0, "allowed_updates": ["callback_query"]}
+        timeout_seconds = max(0, timeout_seconds)
+        payload: dict[str, object] = {"timeout": timeout_seconds, "allowed_updates": ["callback_query"]}
         if offset is not None:
             payload["offset"] = offset
         url = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=max(30.0, timeout_seconds + 10.0)) as client:
                 response = await client.post(url, json=payload)
                 data = response.json()
         except (httpx.HTTPError, ValueError) as exc:

@@ -127,7 +127,9 @@ For each article run, the worker takes the latest `DZEN_ARTICLE_CANDIDATE_LIMIT`
 
 Scheduled Dzen articles are idempotent by slot. A successful article for `2026-07-03 18:00` will not be generated again after a restart.
 
-The loop also polls Telegram admin callback buttons through `getUpdates`, so no webhook is required. Keep one worker instance running per bot token to avoid competing update offsets.
+In `--loop`, Telegram admin callback buttons are handled by a separate long-poll task through `getUpdates`, so Dzen accept/reject buttons do not wait for the next `WORKER_POLL_SECONDS` processing pass. Keep one worker instance running per bot token to avoid competing update offsets. The long-poll timeout is controlled by:
+
+    ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=25
 
 To ingest and translate without publishing:
 
@@ -238,10 +240,15 @@ When `DZEN_ARTICLE_REVIEW_ENABLED=true`, generated articles are not sent directl
 The current admin target is a personal Telegram DM:
 
     ADMIN_TELEGRAM_CHAT_ID=<your_personal_telegram_user_id>
+    ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=25
 
 If there is no response within `DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS`, the draft is marked `rejected_timeout` and is not published. On Saturday and Sunday, when `DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true`, scheduled articles bypass review and publish directly to `DZEN_TELEGRAM_BRIDGE_CHAT_ID`.
 
 The worker stores the Telegram update offset in SQLite, so callback processing survives restarts. If a generated draft fails validation or publishing, the worker sends an admin notification.
+
+If a callback was lost while switching worker processes, publish a still-pending review article manually:
+
+    python -m n1_project.worker --approve-article 2
 
 Recommended OpenRouter settings:
 

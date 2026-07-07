@@ -50,3 +50,36 @@ async def test_get_callback_updates_timeout_returns_empty_list(monkeypatch, capl
 
     assert updates == []
     assert "admin getUpdates request failed" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_callback_updates_uses_long_poll_timeout(monkeypatch) -> None:
+    calls = {}
+
+    class Response:
+        def json(self):
+            return {"ok": True, "result": []}
+
+    class CaptureClient:
+        def __init__(self, *args, **kwargs):
+            calls["client_timeout"] = kwargs.get("timeout")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, json):
+            calls["payload"] = json
+            return Response()
+
+    monkeypatch.setattr(httpx, "AsyncClient", CaptureClient)
+    admin = AdminNotifier("token", "-100admin")
+
+    updates = await admin.get_callback_updates(offset=123, timeout_seconds=25)
+
+    assert updates == []
+    assert calls["client_timeout"] == 35.0
+    assert calls["payload"]["timeout"] == 25
+    assert calls["payload"]["offset"] == 123

@@ -7,6 +7,7 @@ import logging
 import sys
 import time
 import traceback
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 
@@ -654,12 +655,13 @@ async def process_admin_callbacks(
     model: TextModel,
     admin: AdminNotifier,
     dry_run: bool,
+    update_timeout_seconds: int = 0,
 ) -> None:
     if not admin.configured:
         return
     offset_raw = db.get_state("admin_telegram_update_offset")
     offset = int(offset_raw) if offset_raw else None
-    updates = await admin.get_callback_updates(offset)
+    updates = await admin.get_callback_updates(offset, timeout_seconds=update_timeout_seconds)
     for update in updates:
         update_id = int(update.get("update_id", 0))
         try:
@@ -685,6 +687,36 @@ async def process_admin_callbacks(
             await notify_admin(admin, "Admin callback failed", f"update_id={update_id}\nerror={exc}")
         finally:
             db.set_state("admin_telegram_update_offset", str(update_id + 1))
+
+
+async def poll_admin_callbacks_forever(
+    db: QueueDatabase,
+    settings: Settings,
+    model: TextModel,
+    admin: AdminNotifier,
+    dry_run: bool,
+) -> None:
+    if not admin.configured:
+        logging.info("admin callback long-poll disabled: admin notifications are not configured")
+        return
+    timeout_seconds = max(1, settings.admin_callback_poll_timeout_seconds)
+    logging.info("starting admin callback long-poll timeout_seconds=%s", timeout_seconds)
+    while True:
+        try:
+            await process_admin_callbacks(
+                db,
+                settings,
+                model,
+                admin,
+                dry_run=dry_run,
+                update_timeout_seconds=timeout_seconds,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logging.exception("admin callback long-poll failed")
+            await notify_admin(admin, "Admin callback polling failed", exception_report(exc))
+            await asyncio.sleep(2)
 
 
 async def handle_article_accept(
@@ -921,6 +953,43 @@ def print_article_prompt_preview(db: QueueDatabase, settings: Settings, limit: i
     )
 
 
+async def approve_article_from_cli(
+    db: QueueDatabase,
+    settings: Settings,
+    admin: AdminNotifier,
+    article_id: int,
+    dry_run: bool,
+) -> None:
+    article = db.article_by_id(article_id)
+    if article is None:
+        print(json.dumps({"article_id": article_id, "ok": False, "error": "article not found"}, ensure_ascii=False))
+        return
+    if article.status != "pending_review":
+        print(
+            json.dumps(
+                {
+                    "article_id": article_id,
+                    "ok": False,
+                    "error": "article is not pending_review",
+                    "status": article.status,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return
+    await publish_approved_dzen_article(db, settings, admin, article, dry_run=dry_run)
+    print(
+        json.dumps(
+            {
+                "article_id": article_id,
+                "ok": True,
+                "status": "dry_run" if dry_run else "published",
+            },
+            ensure_ascii=False,
+        )
+    )
+
+
 def due_article_slot(settings: Settings, now: datetime | None = None) -> str | None:
     if not settings.dzen_daily_articles_enabled:
         return None
@@ -944,8 +1013,10 @@ async def run_processing_pass(
     force_article: bool,
     skip_publish: bool,
     skip_translate: bool,
+    process_callbacks: bool = True,
 ) -> None:
-    await process_admin_callbacks(db, settings, model, admin, dry_run=dry_run)
+    if process_callbacks:
+        await process_admin_callbacks(db, settings, model, admin, dry_run=dry_run)
     await process_timed_out_article_reviews(db, settings, admin)
     await ingest_from_mode(db, settings, source_mode, limit)
     if skip_translate:
@@ -997,6 +1068,7 @@ async def amain() -> None:
     parser.add_argument("--ingest-only", action="store_true", help="Only ingest source rows; do not translate or publish")
     parser.add_argument("--article", action="store_true", help="Generate and send one Dzen bridge article")
     parser.add_argument("--force-article", action="store_true", help="Generate Dzen article even below DZEN_ARTICLE_MIN_POSTS")
+    parser.add_argument("--approve-article", type=int, help="Publish a pending Dzen article by id")
     parser.add_argument("--status", action="store_true", help="Print queue status and exit")
     parser.add_argument("--list-messages", action="store_true", help="Print recent queued messages and exit")
     parser.add_argument("--list-failed-translations", action="store_true", help="Print failed translation rows and exit")
@@ -1094,6 +1166,10 @@ async def amain() -> None:
         )
         return
 
+    if args.approve_article is not None:
+        await approve_article_from_cli(db, settings, admin, args.approve_article, dry_run=args.dry_run)
+        return
+
     if args.reset_failed:
         reset_translation = db.reset_failed_translations()
         reset_publish = db.reset_failed_publishing()
@@ -1133,27 +1209,36 @@ async def amain() -> None:
 
     if args.loop:
         logging.info("starting worker loop source_mode=%s poll_seconds=%s", source_mode, settings.worker_poll_seconds)
-        while True:
-            try:
-                await run_processing_pass(
-                    db,
-                    settings,
-                    model,
-                    admin,
-                    source_mode=source_mode,
-                    dry_run=args.dry_run,
-                    limit=args.limit if args.limit is not None else settings.worker_batch_limit,
-                    article=args.article,
-                    force_article=args.force_article,
-                    skip_publish=args.skip_publish,
-                    skip_translate=args.ingest_only,
-                )
-            except KeyboardInterrupt:
-                raise
-            except Exception as exc:
-                logging.exception("worker pass failed")
-                await notify_admin(admin, "Worker pass failed", exception_report(exc))
-            await asyncio.sleep(settings.worker_poll_seconds)
+        callback_task = asyncio.create_task(
+            poll_admin_callbacks_forever(db, settings, model, admin, dry_run=args.dry_run)
+        )
+        try:
+            while True:
+                try:
+                    await run_processing_pass(
+                        db,
+                        settings,
+                        model,
+                        admin,
+                        source_mode=source_mode,
+                        dry_run=args.dry_run,
+                        limit=args.limit if args.limit is not None else settings.worker_batch_limit,
+                        article=args.article,
+                        force_article=args.force_article,
+                        skip_publish=args.skip_publish,
+                        skip_translate=args.ingest_only,
+                        process_callbacks=False,
+                    )
+                except KeyboardInterrupt:
+                    raise
+                except Exception as exc:
+                    logging.exception("worker pass failed")
+                    await notify_admin(admin, "Worker pass failed", exception_report(exc))
+                await asyncio.sleep(settings.worker_poll_seconds)
+        finally:
+            callback_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await callback_task
     else:
         await run_processing_pass(
             db,

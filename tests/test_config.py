@@ -22,6 +22,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "MAX_CA_BUNDLE=certs/max.pem",
                 "ADMIN_TELEGRAM_CHAT_ID=-100admin",
                 "ADMIN_NOTIFICATIONS_ENABLED=true",
+                "ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=11",
                 "DZEN_DAILY_ARTICLES_ENABLED=true",
                 "DZEN_DAILY_ARTICLE_TIMES=10:00,18:00",
                 "DZEN_ARTICLE_MIN_POSTS=9",
@@ -56,6 +57,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
     assert settings.dzen_article_candidate_limit == 10
     assert settings.admin_telegram_chat_id == "-100admin"
     assert settings.admin_notifications_enabled is True
+    assert settings.admin_callback_poll_timeout_seconds == 11
     assert settings.dzen_article_review_enabled is True
     assert settings.dzen_article_review_max_attempts == 4
     assert settings.dzen_article_review_timeout_hours == 3
@@ -77,3 +79,4 @@ def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
     assert settings.openrouter_translation_model == "deepseek/deepseek-v4-flash"
     assert settings.openrouter_article_model == "openai/gpt-5.3-chat"
     assert settings.translation_max_attempts == 5
+    assert settings.admin_callback_poll_timeout_seconds == 25

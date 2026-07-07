@@ -154,6 +154,7 @@ Fill these values from the local working `.env`:
 
     ADMIN_TELEGRAM_CHAT_ID=<your_personal_telegram_user_id>
     ADMIN_NOTIFICATIONS_ENABLED=true
+    ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=25
 
     DZEN_TELEGRAM_BRIDGE_CHAT_ID=<real_dzen_bridge_chat_id>
     DZEN_DAILY_ARTICLES_ENABLED=true
