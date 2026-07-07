@@ -100,6 +100,35 @@ def test_translation_issues_allow_h1_period_translation() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_q2_period_word_translation() -> None:
+    source = (
+        "Samsung reported preliminary results showing operating profit rose 19x YoY in Q2 2026. "
+        "Revenue grew 2.2x.\n"
+        "Q2 profit exceeded combined earnings over the past three years.\n"
+        "The driver remains the same - AI."
+    )
+    output = (
+        "Samsung \u0441\u043e\u043e\u0431\u0449\u0438\u043b\u0430 \u043e "
+        "\u043f\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0445 "
+        "\u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u0445: "
+        "\u043e\u043f\u0435\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u0430\u044f "
+        "\u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0432\u044b\u0440\u043e\u0441\u043b\u0430 "
+        "\u0432 19 \u0440\u0430\u0437 \u0433/\u0433 \u0432\u043e "
+        "\u0432\u0442\u043e\u0440\u043e\u043c \u043a\u0432\u0430\u0440\u0442\u0430\u043b\u0435 "
+        "2026 \u0433\u043e\u0434\u0430. \u0412\u044b\u0440\u0443\u0447\u043a\u0430 "
+        "\u0432\u044b\u0440\u043e\u0441\u043b\u0430 \u0432 2,2 \u0440\u0430\u0437\u0430.\n"
+        "\u041f\u0440\u0438\u0431\u044b\u043b\u044c \u0437\u0430 \u0432\u0442\u043e\u0440\u043e\u0439 "
+        "\u043a\u0432\u0430\u0440\u0442\u0430\u043b \u043f\u0440\u0435\u0432\u044b\u0441\u0438\u043b\u0430 "
+        "\u0441\u043e\u0432\u043e\u043a\u0443\u043f\u043d\u0443\u044e \u043f\u0440\u0438\u0431\u044b\u043b\u044c "
+        "\u0437\u0430 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u0442\u0440\u0438 "
+        "\u0433\u043e\u0434\u0430.\n"
+        "\u0414\u0440\u0430\u0439\u0432\u0435\u0440 \u043e\u0441\u0442\u0430\u0435\u0442\u0441\u044f "
+        "\u0442\u0435\u043c \u0436\u0435 - AI."
+    )
+
+    assert translation_issues(source, output) == []
+
+
 def test_translation_issues_allow_english_ordinal_suffix_translation() -> None:
     source = "Trump asked Walmart to cut prices for the 250th anniversary of the United States"
     output = "Трамп попросил Walmart снизить цены к 250-летию США"

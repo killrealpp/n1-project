@@ -7,6 +7,8 @@ def test_translation_prompt_requests_strict_literal_translation() -> None:
     assert "Preserve every line break" in prompt
     assert "Do not add or remove hashtags" in prompt
     assert "If the source starts with an emoji or flag" in prompt
+    assert "Translate each source line exactly once" in prompt
+    assert "Do not add blank lines" in prompt
     assert "Do not invent sources" in prompt
     assert "Return only the translated post text" in prompt
 

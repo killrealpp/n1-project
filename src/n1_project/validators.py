@@ -11,6 +11,20 @@ NUMBER_RE = re.compile(
     re.IGNORECASE,
 )
 PERIOD_NUMBER_RE = re.compile(r"\b[HQ]([1-4])\b", re.IGNORECASE)
+RU_PERIOD_WORD_PATTERNS = {
+    "1": (
+        r"\bперв(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ом)\s+(?:квартал|квартале|квартала|кварталу|кварталом|полугодие|полугодии|полугодия|полугодию|полугодием)\b",
+    ),
+    "2": (
+        r"\bвтор(?:ой|ого|ому|ым|ом|ая|ую|ое|ом)\s+(?:квартал|квартале|квартала|кварталу|кварталом|полугодие|полугодии|полугодия|полугодию|полугодием)\b",
+    ),
+    "3": (
+        r"\bтрет(?:ий|ьего|ьему|ьим|ьем|ья|ью|ье|ьем)\s+(?:квартал|квартале|квартала|кварталу|кварталом)\b",
+    ),
+    "4": (
+        r"\bчетверт(?:ый|ого|ому|ым|ом|ая|ую|ое|ом)\s+(?:квартал|квартале|квартала|кварталу|кварталом)\b",
+    ),
+}
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
 LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
@@ -69,6 +83,10 @@ def extract_urls(text: str) -> set[str]:
 def extract_numbers(text: str) -> set[str]:
     numbers = set(NUMBER_RE.findall(text))
     numbers.update(PERIOD_NUMBER_RE.findall(text))
+    normalized = text.lower()
+    for value, patterns in RU_PERIOD_WORD_PATTERNS.items():
+        if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
+            numbers.add(value)
     return numbers
 
 
