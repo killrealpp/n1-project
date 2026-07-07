@@ -228,6 +228,18 @@ class QueueDatabase:
             ).fetchall()
         return {str(row["key"]): int(row["count"]) for row in rows}
 
+    def successful_publish_platforms(self, message_id: int) -> set[str]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT platform
+                FROM publish_results
+                WHERE message_id = ? AND status = 'published'
+                """,
+                (message_id,),
+            ).fetchall()
+        return {str(row["platform"]) for row in rows}
+
     def article_status_counts(self) -> dict[str, int]:
         with self.connect() as conn:
             rows = conn.execute(

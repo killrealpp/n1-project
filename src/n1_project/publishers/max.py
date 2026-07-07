@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ssl
+
 import httpx
 
 from n1_project.domain import PublishResult
@@ -16,12 +18,14 @@ class MaxPublisher(Publisher):
         chat_id: str,
         api_base_url: str,
         max_chars: int,
+        ca_bundle: str = "",
         dry_run: bool = False,
     ):
         self.access_token = access_token
         self.chat_id = chat_id
         self.api_base_url = api_base_url.rstrip("/")
         self.max_chars = max_chars
+        self.ca_bundle = ca_bundle
         self.dry_run = dry_run
 
     async def publish_text(self, text: str) -> PublishResult:
@@ -35,13 +39,18 @@ class MaxPublisher(Publisher):
         url = f"{self.api_base_url}/messages"
         params = {"chat_id": self.chat_id}
         headers = {"Authorization": self.access_token}
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=self._verify()) as client:
             response = await client.post(url, params=params, headers=headers, json=payload)
             data = response.json()
         destination_id = self._extract_message_id(data)
         if response.is_success:
             return PublishResult(self.platform, True, destination_id=destination_id or "accepted")
         return PublishResult(self.platform, False, error=str(data))
+
+    def _verify(self) -> bool | ssl.SSLContext:
+        if not self.ca_bundle:
+            return True
+        return ssl.create_default_context(cafile=self.ca_bundle)
 
     @staticmethod
     def _extract_message_id(data: dict[str, object]) -> str | None:

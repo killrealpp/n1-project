@@ -45,6 +45,15 @@ def parse_csv(value: str | None) -> list[str]:
     return [item.strip().lower() for item in value.split(",") if item.strip()]
 
 
+def resolve_optional_path(value: str | None, root: Path) -> str:
+    if value is None or value.strip() == "":
+        return ""
+    path = Path(value.strip()).expanduser()
+    if not path.is_absolute():
+        path = root / path
+    return str(path)
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -71,6 +80,7 @@ class Settings:
     max_access_token: str
     max_chat_id: str
     max_api_base_url: str
+    max_ca_bundle: str
 
     admin_telegram_chat_id: str
     admin_notifications_enabled: bool
@@ -136,6 +146,7 @@ class Settings:
             max_access_token=env.get("MAX_ACCESS_TOKEN", ""),
             max_chat_id=env.get("MAX_CHAT_ID", ""),
             max_api_base_url=env.get("MAX_API_BASE_URL", "https://platform-api2.max.ru").rstrip("/"),
+            max_ca_bundle=resolve_optional_path(env.get("MAX_CA_BUNDLE"), root),
             admin_telegram_chat_id=env.get("ADMIN_TELEGRAM_CHAT_ID", env.get("TELEGRAM_TARGET_CHAT_ID", "")),
             admin_notifications_enabled=parse_bool(env.get("ADMIN_NOTIFICATIONS_ENABLED"), True),
             dzen_telegram_bridge_chat_id=env.get("DZEN_TELEGRAM_BRIDGE_CHAT_ID", ""),

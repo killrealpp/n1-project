@@ -45,6 +45,8 @@ def settings_health(settings: Settings) -> dict[str, object]:
         "telegram_public_preview_ready": bool(settings.telegram_source_public_name),
         "vk_ready": bool(settings.vk_token and settings.vk_id),
         "max_ready": bool(settings.max_access_token and settings.max_chat_id),
+        "max_ca_bundle": settings.max_ca_bundle or None,
+        "max_ca_bundle_configured": bool(settings.max_ca_bundle),
         "admin_notifications_ready": bool(
             settings.admin_notifications_enabled
             and settings.telegram_bot_token

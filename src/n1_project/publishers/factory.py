@@ -26,6 +26,7 @@ def build_publishers(settings: Settings, dry_run: bool = False) -> dict[str, Pub
             chat_id=settings.max_chat_id,
             api_base_url=settings.max_api_base_url,
             max_chars=settings.max_max_text_chars,
+            ca_bundle=settings.max_ca_bundle,
             dry_run=dry_run,
         ),
     }

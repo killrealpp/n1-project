@@ -202,7 +202,13 @@ To let it try winget installation:
 
     python -m n1_project.worker --once --fetch-latest
 
-Current `PUBLISH_ORDER` is `vk,telegram` because MAX is not fully configured. After `MAX_CHAT_ID` is filled and tested, change it back to `vk,max,telegram`.
+Current production `PUBLISH_ORDER` should include MAX after `MAX_ACCESS_TOKEN` and `MAX_CHAT_ID` are filled and tested:
+
+    PUBLISH_ORDER=vk,max,telegram
+
+If MAX publishing fails with `CERTIFICATE_VERIFY_FAILED`, copy or point to a Russian trusted CA bundle and add:
+
+    MAX_CA_BUNDLE=certs/russian_trusted_ca_bundle.pem
 
 ## Dzen Article
 

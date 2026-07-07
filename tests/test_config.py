@@ -19,6 +19,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "TELEGRAM_SOURCE_PUBLIC_NAME=num1_ch",
                 "VK_TOKEN=vk",
                 "VK_ID=123",
+                "MAX_CA_BUNDLE=certs/max.pem",
                 "ADMIN_TELEGRAM_CHAT_ID=-100admin",
                 "ADMIN_NOTIFICATIONS_ENABLED=true",
                 "DZEN_DAILY_ARTICLES_ENABLED=true",
@@ -61,6 +62,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
     assert settings.dzen_article_auto_publish_weekends is True
     assert settings.translation_provider == "openrouter"
     assert settings.openrouter_translation_model == "deepseek/deepseek-v4-flash"
+    assert settings.max_ca_bundle == str(tmp_path / "certs" / "max.pem")
     assert settings.social_post_max_lines == 2
     assert settings.social_post_target_max_chars == 500
     assert settings.publish_order == ["vk", "telegram"]

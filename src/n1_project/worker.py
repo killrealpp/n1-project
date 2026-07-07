@@ -207,7 +207,24 @@ async def publish_pending(
     for message in messages:
         text = message.translated_text or ""
         all_ok = True
+        already_published = db.successful_publish_platforms(message.id)
         for platform in order:
+            if platform in already_published:
+                logging.info("publish skip row=%s platform=%s already published", message.id, platform)
+                if dry_run:
+                    print(
+                        json.dumps(
+                            {
+                                "row": message.id,
+                                "platform": platform,
+                                "ok": True,
+                                "destination_id": "already-published",
+                                "skipped": True,
+                            },
+                            ensure_ascii=False,
+                        )
+                    )
+                continue
             publisher = publishers.get(platform)
             if not publisher:
                 error = f"publisher not configured: {platform}"

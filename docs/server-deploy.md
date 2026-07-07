@@ -149,6 +149,8 @@ Fill these values from the local working `.env`:
     MAX_ACCESS_TOKEN=<real_max_token>
     MAX_CHAT_ID=
     MAX_API_BASE_URL=https://platform-api2.max.ru
+    # Optional if MAX TLS fails with CERTIFICATE_VERIFY_FAILED:
+    # MAX_CA_BUNDLE=certs/russian_trusted_ca_bundle.pem
 
     ADMIN_TELEGRAM_CHAT_ID=<your_personal_telegram_user_id>
     ADMIN_NOTIFICATIONS_ENABLED=true
@@ -295,12 +297,16 @@ Restore database while worker is stopped:
     sudo chown n1:n1 /opt/n1_project/data/n1_project.sqlite3
     sudo systemctl start n1-worker
 
-## 13. Known Remaining Blocker
+## 13. MAX TLS CA Bundle
 
-MAX is not ready until `MAX_CHAT_ID` is filled and tested. Keep:
-
-    PUBLISH_ORDER=vk,telegram
-
-After MAX is tested successfully, change it to:
+MAX publishing is ready when `MAX_ACCESS_TOKEN`, `MAX_CHAT_ID`, and `PUBLISH_ORDER` are configured:
 
     PUBLISH_ORDER=vk,max,telegram
+
+If the server logs `CERTIFICATE_VERIFY_FAILED` against `platform-api2.max.ru`, point the worker to the bundled Russian trusted CA bundle:
+
+    ls -l certs/russian_trusted_ca_bundle.pem
+
+Then add this to `.env`:
+
+    MAX_CA_BUNDLE=certs/russian_trusted_ca_bundle.pem
