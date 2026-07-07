@@ -48,8 +48,8 @@ async def test_run_health_skips_ollama_when_external_providers_are_used(tmp_path
             "TRANSLATION_PROVIDER": "openrouter",
             "ARTICLE_LLM_PROVIDER": "openrouter",
             "OPENROUTER_API_KEY": "key",
-            "OPENROUTER_TRANSLATION_MODEL": "openai/gpt-4.1-mini",
-            "OPENROUTER_ARTICLE_MODEL": "openai/gpt-4.1",
+            "OPENROUTER_TRANSLATION_MODEL": "deepseek/deepseek-v4-flash",
+            "OPENROUTER_ARTICLE_MODEL": "openai/gpt-5.3-chat",
         },
         project_root=tmp_path,
     )

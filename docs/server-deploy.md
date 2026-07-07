@@ -133,6 +133,7 @@ Fill these values from the local working `.env`:
     SOURCE_FETCH_MODE=mtproto
     WORKER_POLL_SECONDS=300
     WORKER_BATCH_LIMIT=10
+    TRANSLATION_MAX_ATTEMPTS=5
 
     TELEGRAM_BOT_TOKEN=<real_bot_token>
     TELEGRAM_TARGET_CHAT_ID=<real_target_chat_or_channel_id>
@@ -166,8 +167,8 @@ Fill these values from the local working `.env`:
     TRANSLATION_PROVIDER=openrouter
     ARTICLE_LLM_PROVIDER=openrouter
     OPENROUTER_API_KEY=<real_openrouter_key>
-    OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini
-    OPENROUTER_ARTICLE_MODEL=openai/gpt-4.1
+    OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash
+    OPENROUTER_ARTICLE_MODEL=openai/gpt-5.3-chat
 
     TELEGRAM_MAX_TEXT_CHARS=4096
     VK_MAX_TEXT_CHARS=16350
@@ -208,7 +209,7 @@ Expected:
 - `openrouter_ready=true`;
 - `ollama.skipped=true` when both translation and articles use OpenRouter;
 - `article_llm_provider=openrouter`;
-- `openrouter_article_model=openai/gpt-4.1`;
+- `openrouter_article_model=openai/gpt-5.3-chat`;
 - `max_ready=false` until `MAX_CHAT_ID` is filled.
 
 ## 9. Safe Server Smoke Tests

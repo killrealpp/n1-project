@@ -55,6 +55,7 @@ class Settings:
     source_fetch_mode: str
     worker_poll_seconds: int
     worker_batch_limit: int
+    translation_max_attempts: int
 
     telegram_bot_token: str
     telegram_target_chat_id: str
@@ -122,6 +123,7 @@ class Settings:
             source_fetch_mode=env.get("SOURCE_FETCH_MODE", "mtproto").lower(),
             worker_poll_seconds=parse_int(env.get("WORKER_POLL_SECONDS"), 300),
             worker_batch_limit=parse_int(env.get("WORKER_BATCH_LIMIT"), 10),
+            translation_max_attempts=parse_int(env.get("TRANSLATION_MAX_ATTEMPTS"), 5),
             telegram_bot_token=env.get("TELEGRAM_BOT_TOKEN", ""),
             telegram_target_chat_id=env.get("TELEGRAM_TARGET_CHAT_ID", ""),
             telegram_source_channel_id=env.get("TELEGRAM_SOURCE_CHANNEL_ID", ""),
@@ -154,9 +156,9 @@ class Settings:
             openrouter_api_key=env.get("OPENROUTER_API_KEY", ""),
             openrouter_translation_model=env.get(
                 "OPENROUTER_TRANSLATION_MODEL",
-                env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-4.1-mini"),
+                env.get("OPENROUTER_ARTICLE_MODEL", "deepseek/deepseek-v4-flash"),
             ),
-            openrouter_article_model=env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-4.1"),
+            openrouter_article_model=env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-5.3-chat"),
             telegram_max_text_chars=parse_int(env.get("TELEGRAM_MAX_TEXT_CHARS"), 4096),
             vk_max_text_chars=parse_int(env.get("VK_MAX_TEXT_CHARS"), 16350),
             max_max_text_chars=parse_int(env.get("MAX_MAX_TEXT_CHARS"), 4000),

@@ -75,7 +75,7 @@ If a row is not translated yet, `--publish-row` prints a clear non-publishable e
 On small servers, use external translation:
 
     TRANSLATION_PROVIDER=openrouter
-    OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini
+    OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash
 
 Then translate one queued source row:
 
@@ -145,6 +145,10 @@ Show recent queued messages:
 
     python -m n1_project.worker --list-messages --limit 5
 
+Show failed translation rows, ordered by highest retry count:
+
+    python -m n1_project.worker --list-failed-translations --limit 20
+
 ## Doctor
 
 Check env readiness and LLM provider readiness:
@@ -170,6 +174,8 @@ Show the Dzen article prompt from translated queued posts:
 If a temporary provider or platform problem puts rows into `failed_translation` or `failed_retry`, move them back to retryable states:
 
     python -m n1_project.worker --reset-failed
+
+Automatic translation retries stop after `TRANSLATION_MAX_ATTEMPTS` failed attempts for the same row. Use `--list-failed-translations` to inspect stuck rows, then either deploy a validator/prompt fix, set a manual translation with `--set-translation`, or run `--reset-failed` after the underlying problem is fixed.
 
 ## Legacy: Run Ollama
 
@@ -237,8 +243,8 @@ Recommended OpenRouter settings:
     TRANSLATION_PROVIDER=openrouter
     ARTICLE_LLM_PROVIDER=openrouter
     OPENROUTER_API_KEY=...
-    OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini
-    OPENROUTER_ARTICLE_MODEL=openai/gpt-4.1
+    OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash
+    OPENROUTER_ARTICLE_MODEL=openai/gpt-5.3-chat
 
 Short-post translation and Dzen article generation should both use OpenRouter in production.
 

@@ -86,7 +86,7 @@ async def translate_pending(
     limit: int,
     admin: AdminNotifier | None = None,
 ) -> None:
-    for message in db.messages_for_translation(limit=limit):
+    for message in db.messages_for_translation(limit=limit, max_attempts=settings.translation_max_attempts):
         try:
             translated = prepare_social_post_text(
                 await model.translate_post(message.source_text),
@@ -95,7 +95,7 @@ async def translate_pending(
             )
             issues = [] if dry_run else translation_issues(message.source_text, translated)
             if issues:
-                raise ValueError("; ".join(issues))
+                raise ValueError(translation_validation_error(issues, translated))
             if dry_run:
                 logging.info("dry-run translation row=%s chars=%s", message.id, len(translated))
                 print(json.dumps({"row": message.id, "translated_text": translated}, ensure_ascii=False))
@@ -145,7 +145,7 @@ async def translate_one_row(
         )
         issues = [] if dry_run else translation_issues(message.source_text, translated)
         if issues:
-            raise ValueError("; ".join(issues))
+            raise ValueError(translation_validation_error(issues, translated))
         if not dry_run:
             db.mark_translated(message.id, translated)
         print(
@@ -290,6 +290,14 @@ def publisher_result_error(platform: str, exc: Exception):
     from n1_project.domain import PublishResult
 
     return PublishResult(platform=platform, ok=False, error=str(exc))
+
+
+def translation_validation_error(issues: list[str], translated: str) -> str:
+    output = translated.replace("\r\n", "\n").replace("\r", "\n")
+    output = output.replace("\n", "\\n")
+    if len(output) > 500:
+        output = output[:497] + "..."
+    return f"{'; '.join(issues)} | output={output}"
 
 
 RU_MONTH_NAMES = (
@@ -776,6 +784,24 @@ def print_messages(db: QueueDatabase, limit: int) -> None:
     print(json.dumps(rows, ensure_ascii=False, indent=2, sort_keys=True))
 
 
+def print_failed_translations(db: QueueDatabase, limit: int) -> None:
+    rows = []
+    for message in db.failed_translation_messages(limit=limit):
+        rows.append(
+            {
+                "id": message.id,
+                "source_channel_id": message.source_channel_id,
+                "source_message_id": message.source_message_id,
+                "status": message.status,
+                "attempts": message.attempts,
+                "last_error": message.last_error,
+                "source_text": message.source_text,
+                "translated_text": message.translated_text,
+            }
+        )
+    print(json.dumps(rows, ensure_ascii=False, indent=2, sort_keys=True))
+
+
 def set_translation_from_cli(db: QueueDatabase, settings: Settings, row_id: int, text: str, force: bool = False) -> None:
     prepared = prepare_social_post_text(
         text,
@@ -937,6 +963,7 @@ async def amain() -> None:
     parser.add_argument("--force-article", action="store_true", help="Generate Dzen article even below DZEN_ARTICLE_MIN_POSTS")
     parser.add_argument("--status", action="store_true", help="Print queue status and exit")
     parser.add_argument("--list-messages", action="store_true", help="Print recent queued messages and exit")
+    parser.add_argument("--list-failed-translations", action="store_true", help="Print failed translation rows and exit")
     parser.add_argument("--reset-failed", action="store_true", help="Move failed translation/publish rows back to retryable states")
     parser.add_argument("--doctor", action="store_true", help="Check env and provider readiness")
     parser.add_argument("--print-translation-prompt", action="store_true", help="Print the translation prompt without calling an LLM")
@@ -991,6 +1018,10 @@ async def amain() -> None:
 
     if args.list_messages:
         print_messages(db, limit=args.limit if args.limit is not None else 10)
+        return
+
+    if args.list_failed_translations:
+        print_failed_translations(db, limit=args.limit if args.limit is not None else 20)
         return
 
     if args.translate_row is not None:

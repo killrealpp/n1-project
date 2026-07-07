@@ -13,6 +13,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "SOURCE_FETCH_MODE=public-preview",
                 "WORKER_POLL_SECONDS=60",
                 "WORKER_BATCH_LIMIT=7",
+                "TRANSLATION_MAX_ATTEMPTS=3",
                 "TELEGRAM_BOT_TOKEN=token",
                 "TELEGRAM_TARGET_CHAT_ID=-1001",
                 "TELEGRAM_SOURCE_PUBLIC_NAME=num1_ch",
@@ -29,7 +30,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS=3",
                 "DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true",
                 "TRANSLATION_PROVIDER=openrouter",
-                "OPENROUTER_TRANSLATION_MODEL=openai/gpt-4.1-mini",
+                "OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash",
                 "SOCIAL_POST_MAX_LINES=2",
                 "SOCIAL_POST_TARGET_MAX_CHARS=500",
                 "PUBLISH_ORDER=vk, telegram",
@@ -46,6 +47,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
     assert settings.source_fetch_mode == "public-preview"
     assert settings.worker_poll_seconds == 60
     assert settings.worker_batch_limit == 7
+    assert settings.translation_max_attempts == 3
     assert settings.telegram_source_public_name == "num1_ch"
     assert settings.dzen_daily_articles_enabled is True
     assert settings.dzen_daily_article_times == ["10:00", "18:00"]
@@ -58,7 +60,7 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
     assert settings.dzen_article_review_timeout_hours == 3
     assert settings.dzen_article_auto_publish_weekends is True
     assert settings.translation_provider == "openrouter"
-    assert settings.openrouter_translation_model == "openai/gpt-4.1-mini"
+    assert settings.openrouter_translation_model == "deepseek/deepseek-v4-flash"
     assert settings.social_post_max_lines == 2
     assert settings.social_post_target_max_chars == 500
     assert settings.publish_order == ["vk", "telegram"]
@@ -70,5 +72,6 @@ def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
     assert settings.llm_provider == "openrouter"
     assert settings.translation_provider == "openrouter"
     assert settings.article_llm_provider == "openrouter"
-    assert settings.openrouter_translation_model == "openai/gpt-4.1-mini"
-    assert settings.openrouter_article_model == "openai/gpt-4.1"
+    assert settings.openrouter_translation_model == "deepseek/deepseek-v4-flash"
+    assert settings.openrouter_article_model == "openai/gpt-5.3-chat"
+    assert settings.translation_max_attempts == 5

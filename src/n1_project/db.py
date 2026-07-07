@@ -142,11 +142,25 @@ class QueueDatabase:
             ).fetchone()
             return int(row["id"]), inserted
 
-    def messages_for_translation(self, limit: int = 20) -> list[QueuedMessage]:
+    def messages_for_translation(self, limit: int = 20, max_attempts: int | None = None) -> list[QueuedMessage]:
+        if max_attempts is not None:
+            return self._fetch_messages(
+                "status = 'received' OR (status = 'failed_translation' AND attempts < ?)",
+                (max_attempts,),
+                limit,
+            )
         return self._fetch_messages(
             "status IN ('received', 'failed_translation')",
             (),
             limit,
+        )
+
+    def failed_translation_messages(self, limit: int = 20) -> list[QueuedMessage]:
+        return self._fetch_messages(
+            "status = 'failed_translation'",
+            (),
+            limit,
+            order_by="attempts DESC, id ASC",
         )
 
     def messages_for_publishing(self, limit: int = 20, message_id: int | None = None) -> list[QueuedMessage]:
@@ -350,7 +364,7 @@ class QueueDatabase:
             cur = conn.execute(
                 """
                 UPDATE messages
-                SET status = 'received', last_error = NULL, updated_at = datetime('now')
+                SET status = 'received', attempts = 0, last_error = NULL, updated_at = datetime('now')
                 WHERE status = 'failed_translation'
                 """
             )

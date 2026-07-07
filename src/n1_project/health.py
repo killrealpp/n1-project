@@ -37,6 +37,7 @@ def settings_health(settings: Settings) -> dict[str, object]:
     ollama_required = settings.translation_provider == "ollama" or settings.article_llm_provider == "ollama"
     return {
         "source_fetch_mode": settings.source_fetch_mode,
+        "translation_max_attempts": settings.translation_max_attempts,
         "telegram_target_ready": bool(settings.telegram_bot_token and settings.telegram_target_chat_id),
         "telegram_mtproto_ready": not mtproto_missing and bool(mtproto_session["ok"]),
         "telegram_mtproto_missing": mtproto_missing,

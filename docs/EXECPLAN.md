@@ -59,6 +59,8 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-06) Prepared GitHub/server deployment artifacts: `README.md`, `docs/server-deploy.md`, `docs/readiness-report.md`, and `deploy/n1-worker.service.example`.
 - [x] (2026-07-06) Added `TRANSLATION_PROVIDER=openrouter` so small VDS servers can translate short posts without loading Ollama.
 - [x] (2026-07-06) Switched the production LLM path fully to OpenRouter: default providers are OpenRouter, `.env.example` no longer requires Ollama, `--doctor` skips Ollama, and server docs use `screen`.
+- [x] (2026-07-07) Fixed recurring translation validation noise for ordinal/magnitude suffixes and ticker-only rows; added `TRANSLATION_MAX_ATTEMPTS` and `--list-failed-translations`.
+- [x] (2026-07-07) Switched short-post translation model to `deepseek/deepseek-v4-flash` and Dzen article generation to `openai/gpt-5.3-chat`.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -96,6 +98,12 @@ The user wants one automation system that reads new English posts from a source 
 
 - Observation: Llama can hallucinate extra details in short translations if not aggressively constrained.
   Evidence: the first real row translation added `50%+1`, `LSEG`, hashtags, and extra emojis to a source post that did not contain them. The row was manually corrected, and validators now reject added numbers, hashtags, emojis, and known source attributions.
+
+- Observation: Some source-channel numbers are embedded in English suffix forms rather than plain numeric tokens.
+  Evidence: server logs repeatedly showed `added numbers: 250` and `added numbers: 20`; public preview examples include `250th anniversary` and `$20M`, whose natural Russian translations can surface as plain `250` and `20`.
+
+- Observation: Some valid source posts contain only tickers, pairs, and prices, so a correct output may contain no Cyrillic.
+  Evidence: the current public preview includes `USDCNY = 6.79` and `USDRUB = 80.2`, which should not fail only because the translated output remains a ticker table.
 
 - Observation: Dzen article slot idempotency must be persistent, not only in memory.
   Evidence: worker loops can restart during the same 13:00 or 19:00 window; `articles.slot_key` with a unique index now prevents duplicate published articles for the same slot.
@@ -172,6 +180,10 @@ The user wants one automation system that reads new English posts from a source 
   Rationale: weekday articles need human approval, but stale drafts should not hang forever; weekend publishing should continue without manual confirmation.
   Date/Author: 2026-07-06 / Codex.
 
+- Decision: Cap automatic translation retries per row with `TRANSLATION_MAX_ATTEMPTS`, while keeping row-specific manual translation and reset commands available.
+  Rationale: strict validation is useful, but endless retries for deterministic validation failures create noisy logs and repeated admin alerts without making progress.
+  Date/Author: 2026-07-07 / Codex.
+
 ## Outcomes & Retrospective
 
 The repository is now prepared for implementation: env contract, publishing tests, Dzen research, project guide, Obsidian knowledge base, and this execution plan exist. The next meaningful outcome is a running local Python service that can read one source Telegram message, translate it through Ollama, and enqueue platform publishing without duplicates.
@@ -221,6 +233,10 @@ Update 2026-07-06: the article prompt now separates the headline from the date s
 Update 2026-07-06: GitHub/server deployment preparation is documented. Added a README, a server deployment guide with Ubuntu/systemd/Ollama/env commands, a readiness report, and a systemd service template. The code test suite passes 51 tests. Remaining deployment caveats are Ollama installation on the server and MAX `MAX_CHAT_ID`.
 
 Update 2026-07-06: production LLM strategy changed to OpenRouter-only. `Settings` now defaults `LLM_PROVIDER`, `TRANSLATION_PROVIDER`, and `ARTICLE_LLM_PROVIDER` to `openrouter`; `.env.example` documents OpenRouter models; `build_text_model` no longer creates an Ollama client unless an env explicitly opts into `ollama`; the article prompt contains normal Russian date-frame strings; and server instructions now remove Ollama and run the worker in `screen`. Validation: `python -m pytest` passes 53 tests, `python -m compileall -q src tests` completes, and `--doctor` reports `ollama_required=false`.
+
+Update 2026-07-07: repeated server translation failures were traced to validator edge cases and unbounded retry noise. Number validation now understands English ordinal and magnitude suffixes such as `250th`, `$20M`, and attached `bps`/`pp` forms; ticker-only source rows can pass without Cyrillic when there is no translatable English, while untranslated all-caps news is still rejected; failed translation rows stop automatic retries after `TRANSLATION_MAX_ATTEMPTS`; and `--list-failed-translations` shows stuck rows for diagnosis. Validation: `python -m pytest` passes 64 tests, `python -m compileall -q src tests` completes, and direct checks for the observed problem patterns behave correctly.
+
+Update 2026-07-07: short-post translation now uses `deepseek/deepseek-v4-flash` through OpenRouter, while Dzen article generation uses `openai/gpt-5.3-chat`. Local `.env`, `.env.example`, config defaults, server/runbook docs, tests, and LLM strategy pages were aligned. Validation: `--doctor` reports both configured models, `python -m pytest` passes 64 tests, and `python -m compileall -q src tests` completes.
 
 ## Context and Orientation
 

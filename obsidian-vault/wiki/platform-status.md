@@ -38,7 +38,7 @@ The project generates article drafts, sends them to the personal admin DM config
 
 Status: OpenRouter is the production LLM path.
 
-The server should use `TRANSLATION_PROVIDER=openrouter` and `ARTICLE_LLM_PROVIDER=openrouter` because `llama3.1:8b` exceeded available RAM on the 2 GB VDS. Validators remain strict regardless of provider. Dzen article writing uses a GPT model such as `openai/gpt-4.1`, with Telegram admin review before publishing.
+The server should use `TRANSLATION_PROVIDER=openrouter` and `ARTICLE_LLM_PROVIDER=openrouter` because `llama3.1:8b` exceeded available RAM on the 2 GB VDS. Validators remain strict regardless of provider. Translation uses `deepseek/deepseek-v4-flash`; Dzen article writing uses `openai/gpt-5.3-chat`, with Telegram admin review before publishing.
 
 ## Related
 

@@ -63,11 +63,24 @@ def test_reset_failed_states(tmp_path: Path) -> None:
     db.mark_failed(message_id, "failed_translation", "temporary")
     assert db.reset_failed_translations() == 1
     assert db.status_counts() == {"received": 1}
+    assert db.message_by_id(message_id).attempts == 0
 
     db.mark_translated(message_id, RU_HELLO)
     db.mark_failed(message_id, "failed_retry", "temporary")
     assert db.reset_failed_publishing() == 1
     assert db.status_counts() == {"translated": 1}
+
+
+def test_messages_for_translation_respects_failed_attempt_cap(tmp_path: Path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    first_id, _ = db.upsert_source_post(SourcePost("-100", "1", "Hello"))
+    second_id, _ = db.upsert_source_post(SourcePost("-100", "2", "World"))
+
+    db.mark_failed(first_id, "failed_translation", "temporary")
+
+    assert [message.id for message in db.messages_for_translation(max_attempts=1)] == [second_id]
+    assert [message.id for message in db.failed_translation_messages()] == [first_id]
 
 
 def test_article_slot_is_idempotent(tmp_path: Path) -> None:

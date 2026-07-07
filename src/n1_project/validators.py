@@ -4,7 +4,11 @@ import re
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
 NUMBER_RE = re.compile(
-    r"(?<![\w.])(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?:%|[xX])?(?!\w)"
+    r"(?<![\w.])"
+    r"(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
+    r"(?:%|x|st|nd|rd|th|bps?|pps?|pts?|trln|bln|mln|bn|mn|[kmbt])?"
+    r"(?!\w)",
+    re.IGNORECASE,
 )
 PERIOD_NUMBER_RE = re.compile(r"\b[HQ]([1-4])\b", re.IGNORECASE)
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
@@ -23,6 +27,19 @@ KNOWN_ATTRIBUTIONS = {
     "LSEG",
     "RTRS",
     "TASS",
+}
+CURRENCY_CODES = {
+    "AUD",
+    "BRL",
+    "CAD",
+    "CHF",
+    "CNY",
+    "EUR",
+    "GBP",
+    "HKD",
+    "JPY",
+    "RUB",
+    "USD",
 }
 
 
@@ -61,8 +78,33 @@ def normalize_number_token(value: str) -> str:
     if token.endswith("%"):
         token = token[:-1]
         suffix = "%"
-    elif token.endswith(("x", "X")):
-        token = token[:-1]
+    else:
+        lower_token = token.lower()
+        for removable_suffix in (
+            "bps",
+            "bp",
+            "pps",
+            "pp",
+            "pts",
+            "pt",
+            "trln",
+            "bln",
+            "mln",
+            "bn",
+            "mn",
+            "st",
+            "nd",
+            "rd",
+            "th",
+            "x",
+            "k",
+            "m",
+            "b",
+            "t",
+        ):
+            if lower_token.endswith(removable_suffix):
+                token = token[: -len(removable_suffix)]
+                break
 
     token = token.replace("\u00a0", " ").replace("\u202f", " ")
     token = re.sub(r"(?<=\d)\s+(?=\d{3}(?:\D|$))", "", token)
@@ -263,11 +305,40 @@ def leftover_english_issue(output_text: str) -> str | None:
     return None
 
 
+def is_market_symbol_word(word: str) -> bool:
+    if not word.isupper():
+        return False
+    if word in KNOWN_ATTRIBUTIONS:
+        return True
+    if len(word) <= 5:
+        return True
+    if len(word) == 6 and word[:3] in CURRENCY_CODES and word[3:] in CURRENCY_CODES:
+        return True
+    return False
+
+
+def source_is_symbol_only(source_text: str) -> bool:
+    cleaned = URL_RE.sub(" ", source_text)
+    cleaned = HASHTAG_RE.sub(" ", cleaned)
+    words = LATIN_WORD_RE.findall(cleaned)
+    return bool(words) and all(is_market_symbol_word(word) for word in words)
+
+
+def leftover_english_issue_for_translation(source_text: str, output_text: str) -> str | None:
+    latin_words = LATIN_WORD_RE.findall(output_text)
+    has_cyrillic = bool(CYRILLIC_RE.search(output_text))
+    if has_cyrillic and len(latin_words) > 12:
+        return f"many latin words remain: {len(latin_words)}"
+    if not has_cyrillic and latin_words and not source_is_symbol_only(source_text):
+        return "output has no Cyrillic text"
+    return None
+
+
 def translation_issues(source_text: str, output_text: str) -> list[str]:
     issues = preservation_issues(source_text, output_text)
     issues.extend(structure_issues(source_text, output_text))
     issues.extend(unexpected_addition_issues(source_text, output_text))
-    leftover = leftover_english_issue(output_text)
+    leftover = leftover_english_issue_for_translation(source_text, output_text)
     if leftover:
         issues.append(leftover)
     return issues

@@ -100,6 +100,34 @@ def test_translation_issues_allow_h1_period_translation() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_english_ordinal_suffix_translation() -> None:
+    source = "Trump asked Walmart to cut prices for the 250th anniversary of the United States"
+    output = "Трамп попросил Walmart снизить цены к 250-летию США"
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_attached_magnitude_suffix_translation() -> None:
+    source = "BonkDAO hacked for $20M, but BONK = -6%"
+    output = "BonkDAO взломали на $20 млн, но BONK = -6%"
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_ticker_only_output_without_cyrillic() -> None:
+    source = "💱 USDCNY = 6.79\nUSDRUB = 80.2"
+    output = "💱 USDCNY = 6.79\nUSDRUB = 80.2"
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_reject_untranslated_all_caps_news() -> None:
+    source = "VTB NET PROFIT UNDER IFRS FELL 2.5X YEAR-ON-YEAR"
+    output = "VTB NET PROFIT UNDER IFRS FELL 2.5X YEAR-ON-YEAR"
+
+    assert "output has no Cyrillic text" in translation_issues(source, output)
+
+
 def test_structure_issues_detect_line_count_and_leading_emoji_changes() -> None:
     source = "\U0001f6e2\ufe0f Qatar\n- BBG"
     output = "Qatar \U0001f6e2\ufe0f - BBG"
