@@ -6,7 +6,7 @@ from n1_project.config import Settings
 from n1_project.db import QueueDatabase
 from n1_project.domain import SourcePost
 from n1_project.llm import TextModel
-from n1_project.worker import exception_report, set_translation_from_cli, translate_one_row
+from n1_project.worker import exception_report, set_translation_from_cli, should_notify_translation_failure, translate_one_row
 
 
 class FakeTextModel(TextModel):
@@ -55,6 +55,12 @@ def test_exception_report_includes_traceback_details() -> None:
     assert "type=RuntimeError" in report
     assert "error=boom" in report
     assert "raise_error" in report
+
+
+def test_should_notify_translation_failure_first_and_final_attempts() -> None:
+    assert should_notify_translation_failure(attempts_before_failure=0, max_attempts=5) is True
+    assert should_notify_translation_failure(attempts_before_failure=1, max_attempts=5) is False
+    assert should_notify_translation_failure(attempts_before_failure=4, max_attempts=5) is True
 
 
 def test_set_translation_from_cli_preserves_lines(tmp_path: Path, capsys) -> None:

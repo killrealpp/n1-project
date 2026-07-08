@@ -91,6 +91,10 @@ async def translate_source_text(model: TextModel, source_text: str) -> str:
     return await model.translate_post(source_text)
 
 
+def should_notify_translation_failure(attempts_before_failure: int, max_attempts: int) -> bool:
+    return attempts_before_failure == 0 or attempts_before_failure + 1 >= max_attempts
+
+
 async def translate_pending(
     db: QueueDatabase,
     settings: Settings,
@@ -120,7 +124,16 @@ async def translate_pending(
                 db.mark_failed(message.id, "failed_translation", str(exc))
             logging.exception("translation failed row=%s", message.id)
             if admin:
-                await notify_admin(admin, "Translation failed", f"row={message.id}\nerror={exc}")
+                if should_notify_translation_failure(message.attempts, settings.translation_max_attempts):
+                    await notify_admin(
+                        admin,
+                        "Translation failed",
+                        (
+                            f"row={message.id}\n"
+                            f"attempt={message.attempts + 1}/{settings.translation_max_attempts}\n"
+                            f"error={exc}"
+                        ),
+                    )
 
 
 async def translate_one_row(

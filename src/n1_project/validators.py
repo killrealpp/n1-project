@@ -6,11 +6,13 @@ URL_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
 NUMBER_RE = re.compile(
     r"(?<![\w.])"
     r"(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
-    r"(?:%|x|st|nd|rd|th|bps?|pps?|pts?|trln|bln|mln|bn|mn|[kmbt])?"
+    r"(?:%|x|st|nd|rd|th|bps?|pps?|pts?|msecs?|ms|secs?|trln|bln|mln|bn|mn|[kmbt])?"
     r"(?!\w)",
     re.IGNORECASE,
 )
 PERIOD_NUMBER_RE = re.compile(r"\b[HQ]([1-4])\b", re.IGNORECASE)
+ALNUM_MODEL_NUMBER_RE = re.compile(r"\b[A-ZА-Я]{1,8}-?(\d{1,4})(?:[A-ZА-Яa-zа-я])?\b")
+LAYER_NUMBER_RE = re.compile(r"\b(?:L|Layer)[-\s]?([1-4])\b", re.IGNORECASE)
 RU_PERIOD_WORD_PATTERNS = {
     "1": (
         r"\bперв(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ом)\s+(?:квартал|квартале|квартала|кварталу|кварталом|полугодие|полугодии|полугодия|полугодию|полугодием)\b",
@@ -23,6 +25,20 @@ RU_PERIOD_WORD_PATTERNS = {
     ),
     "4": (
         r"\bчетверт(?:ый|ого|ому|ым|ом|ая|ую|ое|ом)\s+(?:квартал|квартале|квартала|кварталу|кварталом)\b",
+    ),
+}
+RU_LEVEL_WORD_PATTERNS = {
+    "1": (
+        r"\bперв(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ом)\s+уров(?:ень|ня|ню|нем|не)\b",
+    ),
+    "2": (
+        r"\bвтор(?:ой|ого|ому|ым|ом|ая|ую|ое|ом)\s+уров(?:ень|ня|ню|нем|не)\b",
+    ),
+    "3": (
+        r"\bтрет(?:ий|ьего|ьему|ьим|ьем|ья|ью|ье|ьем)\s+уров(?:ень|ня|ню|нем|не)\b",
+    ),
+    "4": (
+        r"\bчетверт(?:ый|ого|ому|ым|ом|ая|ую|ое|ом)\s+уров(?:ень|ня|ню|нем|не)\b",
     ),
 }
 ROMAN_PERIOD_PATTERNS = {
@@ -97,8 +113,13 @@ def extract_urls(text: str) -> set[str]:
 def extract_numbers(text: str) -> set[str]:
     numbers = set(NUMBER_RE.findall(text))
     numbers.update(PERIOD_NUMBER_RE.findall(text))
+    numbers.update(ALNUM_MODEL_NUMBER_RE.findall(text))
+    numbers.update(LAYER_NUMBER_RE.findall(text))
     normalized = text.lower()
     for value, patterns in RU_PERIOD_WORD_PATTERNS.items():
+        if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
+            numbers.add(value)
+    for value, patterns in RU_LEVEL_WORD_PATTERNS.items():
         if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
             numbers.add(value)
     for value, patterns in ROMAN_PERIOD_PATTERNS.items():
@@ -122,6 +143,11 @@ def normalize_number_token(value: str) -> str:
             "pp",
             "pts",
             "pt",
+            "msecs",
+            "msec",
+            "ms",
+            "secs",
+            "sec",
             "trln",
             "bln",
             "mln",

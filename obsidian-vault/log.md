@@ -223,3 +223,7 @@ Investigated why approving a Dzen draft in Telegram did not publish immediately.
 ## [2026-07-08] fix | Preferred-share ticker validation
 
 Investigated server row `4923`, where a symbol-only market signal `🇷🇺 KZOS -10% | KZOSp +10%` failed translation validation with `output has no Cyrillic text`. The lowercase `p` preferred-share suffix made `KZOSp` look like an English word instead of a ticker. Added ticker detection for uppercase Russian-style symbols with a trailing `p` suffix and a regression test showing the row has no translatable English and no translation issues.
+
+## [2026-07-08] fix | Model numbers and L1 validation noise
+
+Investigated server rows `4963` and `5323`. Row `4963` translated source `F35` naturally as `F-35`, which surfaced as a false `added numbers: 35`; row `5323` translated `L1`/`Layer-1` as `первого уровня`, which surfaced as a false `missing numbers: 1`. Number validation now extracts digits from compact model/market codes such as `F35`, `F-35`, `L1`, and `Layer-1`, recognizes Russian ordinal `первого уровня`-style level wording, and treats `50ms` as the same number as `50 миллисекунд`. Added regression tests for both observed rows. Translation failure admin notifications now fire on the first and final retry attempt, while middle retries stay in local logs, reducing repeated Telegram error noise.

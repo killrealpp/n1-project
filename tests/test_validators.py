@@ -156,6 +156,63 @@ def test_translation_issues_allow_attached_magnitude_suffix_translation() -> Non
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_model_hyphen_in_translation() -> None:
+    source = (
+        "\u26a0\ufe0f\U0001f1fa\U0001f1f8\U0001f1ee\U0001f1f1\U0001f1f9\U0001f1f7 "
+        "Netanyahu does not want Trump to sell F35 to Erdogan, calls Erdogan Kim Jong Un.\n\n"
+        "Trump wants to sell F35 to Erdogan, calls Erdogan a great leader.\n\n"
+        "Netanyahu hates Erdogan. Erdogan hates Netanyahu."
+    )
+    output = (
+        "\u26a0\ufe0f\U0001f1fa\U0001f1f8\U0001f1ee\U0001f1f1\U0001f1f9\U0001f1f7 "
+        "\u041d\u0435\u0442\u0430\u043d\u044c\u044f\u0445\u0443 \u043d\u0435 \u0445\u043e\u0447\u0435\u0442, "
+        "\u0447\u0442\u043e\u0431\u044b \u0422\u0440\u0430\u043c\u043f \u043f\u0440\u043e\u0434\u0430\u0432\u0430\u043b "
+        "F-35 \u042d\u0440\u0434\u043e\u0433\u0430\u043d\u0443, \u043d\u0430\u0437\u044b\u0432\u0430\u0435\u0442 "
+        "\u042d\u0440\u0434\u043e\u0433\u0430\u043d\u0430 \u041a\u0438\u043c \u0427\u0435\u043d \u042b\u043d\u043e\u043c.\n\n"
+        "\u0422\u0440\u0430\u043c\u043f \u0445\u043e\u0447\u0435\u0442 \u043f\u0440\u043e\u0434\u0430\u0442\u044c "
+        "F-35 \u042d\u0440\u0434\u043e\u0433\u0430\u043d\u0443, \u043d\u0430\u0437\u044b\u0432\u0430\u0435\u0442 "
+        "\u042d\u0440\u0434\u043e\u0433\u0430\u043d\u0430 \u0432\u0435\u043b\u0438\u043a\u0438\u043c \u043b\u0438\u0434\u0435\u0440\u043e\u043c.\n\n"
+        "\u041d\u0435\u0442\u0430\u043d\u044c\u044f\u0445\u0443 \u043d\u0435\u043d\u0430\u0432\u0438\u0434\u0438\u0442 "
+        "\u042d\u0440\u0434\u043e\u0433\u0430\u043d\u0430. \u042d\u0440\u0434\u043e\u0433\u0430\u043d "
+        "\u043d\u0435\u043d\u0430\u0432\u0438\u0434\u0438\u0442 \u041d\u0435\u0442\u0430\u043d\u044c\u044f\u0445\u0443."
+    )
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_l1_as_first_level_translation() -> None:
+    source = (
+        "\u2734\ufe0f BNB Chain is building a new L1 blockchain for agentic trading\n\n"
+        "Sub-50ms transaction confirmations, no public mempool to reduce front-running risk\n\n"
+        "Testnet launch is planned for late 2026, mainnet for 2027"
+    )
+    output = (
+        "\u2734\ufe0f BNB Chain \u0441\u0442\u0440\u043e\u0438\u0442 \u043d\u043e\u0432\u044b\u0439 "
+        "\u0431\u043b\u043e\u043a\u0447\u0435\u0439\u043d \u043f\u0435\u0440\u0432\u043e\u0433\u043e "
+        "\u0443\u0440\u043e\u0432\u043d\u044f \u0434\u043b\u044f \u0430\u0433\u0435\u043d\u0442\u043d\u043e\u0439 "
+        "\u0442\u043e\u0440\u0433\u043e\u0432\u043b\u0438\n\n"
+        "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u0438\u0435 "
+        "\u0442\u0440\u0430\u043d\u0437\u0430\u043a\u0446\u0438\u0439 \u043c\u0435\u043d\u0435\u0435 "
+        "\u0447\u0435\u043c \u0437\u0430 50 \u043c\u0438\u043b\u043b\u0438\u0441\u0435\u043a\u0443\u043d\u0434, "
+        "\u043e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0438\u0435 \u043f\u0443\u0431\u043b\u0438\u0447\u043d\u043e\u0433\u043e "
+        "mempool \u0434\u043b\u044f \u0441\u043d\u0438\u0436\u0435\u043d\u0438\u044f \u0440\u0438\u0441\u043a\u0430 "
+        "\u0444\u0440\u043e\u043d\u0442\u0440\u0430\u043d\u043d\u0438\u043d\u0433\u0430\n\n"
+        "\u0417\u0430\u043f\u0443\u0441\u043a \u0442\u0435\u0441\u0442\u043d\u0435\u0442\u0430 "
+        "\u0437\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d \u043d\u0430 "
+        "\u043a\u043e\u043d\u0435\u0446 2026 \u0433\u043e\u0434\u0430, \u043c\u0435\u0439\u043d\u043d\u0435\u0442\u0430 "
+        "\u2014 \u043d\u0430 2027 \u0433\u043e\u0434"
+    )
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_layer_one_as_first_level_translation() -> None:
+    source = "BNB Chain is building a new Layer-1 blockchain"
+    output = "BNB Chain \u0441\u0442\u0440\u043e\u0438\u0442 \u043d\u043e\u0432\u044b\u0439 \u0431\u043b\u043e\u043a\u0447\u0435\u0439\u043d \u043f\u0435\u0440\u0432\u043e\u0433\u043e \u0443\u0440\u043e\u0432\u043d\u044f"
+
+    assert translation_issues(source, output) == []
+
+
 def test_translation_issues_allow_ticker_only_output_without_cyrillic() -> None:
     source = "💱 USDCNY = 6.79\nUSDRUB = 80.2"
     output = "💱 USDCNY = 6.79\nUSDRUB = 80.2"
