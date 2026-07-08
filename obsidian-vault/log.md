@@ -219,3 +219,7 @@ Investigated server MAX publish failures with `CERTIFICATE_VERIFY_FAILED` agains
 ## [2026-07-07] fix | Immediate Dzen review callbacks
 
 Investigated why approving a Dzen draft in Telegram did not publish immediately. The worker only checked callback buttons at the start of each normal processing pass, so approvals could wait behind `WORKER_POLL_SECONDS` or a long translation/publishing cycle. Added a separate admin callback long-poll task for `--loop`, controlled by `ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS`, while keeping one-shot callback processing available for manual recovery. Added `--approve-article <id>` for publishing a still-pending Dzen review article if a callback was lost while switching worker processes. `--doctor` now reports the callback timeout setting.
+
+## [2026-07-08] fix | Preferred-share ticker validation
+
+Investigated server row `4923`, where a symbol-only market signal `🇷🇺 KZOS -10% | KZOSp +10%` failed translation validation with `output has no Cyrillic text`. The lowercase `p` preferred-share suffix made `KZOSp` look like an English word instead of a ticker. Added ticker detection for uppercase Russian-style symbols with a trailing `p` suffix and a regression test showing the row has no translatable English and no translation issues.

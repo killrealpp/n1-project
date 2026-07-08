@@ -341,6 +341,8 @@ def leftover_english_issue(output_text: str) -> str | None:
 
 
 def is_market_symbol_word(word: str) -> bool:
+    if re.fullmatch(r"[A-Z]{2,5}p", word):
+        return True
     if not word.isupper():
         return False
     if word in KNOWN_ATTRIBUTIONS:

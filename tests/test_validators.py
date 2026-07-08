@@ -163,6 +163,14 @@ def test_translation_issues_allow_ticker_only_output_without_cyrillic() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_pref_ticker_suffix_without_cyrillic() -> None:
+    source = "\U0001f1f7\U0001f1fa KZOS -10% | KZOSp +10%"
+    output = "\U0001f1f7\U0001f1fa KZOS -10% | KZOSp +10%"
+
+    assert source_has_translatable_english(source) is False
+    assert translation_issues(source, output) == []
+
+
 def test_translation_issues_reject_untranslated_all_caps_news() -> None:
     source = "VTB NET PROFIT UNDER IFRS FELL 2.5X YEAR-ON-YEAR"
     output = "VTB NET PROFIT UNDER IFRS FELL 2.5X YEAR-ON-YEAR"
