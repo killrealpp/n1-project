@@ -228,7 +228,7 @@ For a real review-only draft test, omit `--dry-run`. In one-shot article-only mo
 
 Before publishing a generated Dzen article, check the title, first paragraph, source-grounded facts, and tone against `docs/dzen-article-playbook.md`.
 
-Recommended structure: the first sentence is a specific, truthful headline that gives people a reason to open the article. The next paragraph starts with a date frame such as `Сводка за 6 июля 2026 года:` and immediately explains the selected theme. Do not use `Сводка за дату` as the headline itself.
+Recommended structure: the first sentence is a truthful headline that gives people a reason to open the article. The next paragraph immediately explains what happened, why it matters, and why the reader should continue. Do not force a standalone `Сводка за ...` date line; use the date only when it fits naturally.
 
 ## Dzen Article Review
 

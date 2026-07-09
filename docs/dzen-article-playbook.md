@@ -41,13 +41,13 @@ These are direct Dzen Studio limits. They are useful for editorial rules even th
 
 A good daily article should feel like an original Russian editorial digest, not a mechanically translated bundle of Telegram posts.
 
-Start with a title sentence that names the real subject and value of the article. It should be specific, truthful, and strong enough to open: use a real tension, consequence, unusual combination, exact figure, or sharp market question from the source posts. Avoid missing key facts, bait phrases, and invented drama.
+Start with a title sentence that creates honest curiosity from the real source facts. It should not merely retell the news. Good titles use a real market fear, question, consequence, unexpected signal, exact figure, company, country, or asset from the source posts. Avoid missing key facts, bait phrases, and invented drama.
 
-Use the next paragraph to answer: what happened, why it matters, and what the reader will understand by the end. This paragraph can start with a date frame such as `Сводка за 6 июля 2026 года:`, but the date frame should not replace the headline. The hook should be useful rather than manipulative.
+Use the next paragraph to answer: what happened, why it matters, and why the reader should continue. Do not force a standalone date line such as `Сводка за 6 июля 2026 года:`. The date can appear naturally when useful, but the first screen should feel like an article, not a service bulletin.
 
-Build the body from 3-5 compact blocks. Each block should have one idea, one clear connection to the source posts, and a short takeaway. Prefer concrete nouns and verbs over generic media phrasing.
+Build the body from 3-5 compact blocks. Each block should have one idea, one clear connection to the source posts, and a short takeaway. Prefer concrete nouns and verbs over generic media phrasing. After important facts, explain the cause-and-effect link: why markets reacted, what this can change, and what it means for a normal reader or investor.
 
-End with a short synthesis: what changed, what to watch next, or what practical conclusion follows from the day. Do not add predictions unless the source posts support them.
+End with a short synthesis: what matters now, what investors will watch next, and why the story is not finished. Do not add predictions unless the source posts support them.
 
 ## Daily Editorial Workflow
 
@@ -67,6 +67,14 @@ The title and first paragraph are the traffic gate. Make them concrete before ma
 
 Useful title shapes for this project:
 
+- `Почему рынок испугался...`;
+- `Что произошло...`;
+- `Что теперь будет...`;
+- `Почему это важно...`;
+- `Что означает...`;
+- `Что изменилось...`;
+- `Рынок получил неожиданный сигнал...`;
+- `Инвесторы не ожидали...`;
 - fact + consequence;
 - concrete market items + one unifying theme;
 - event/fact + restrained question about what changed or what to watch;
@@ -107,14 +115,19 @@ Each scheduled article uses a persistent slot key such as `2026-07-03 18:00`. Pu
 ## Style Rules
 
 - Write in natural Russian.
+- Write like an experienced financial journalist explaining the topic to a friend who follows economics but is not a professional.
 - Preserve the topic and facts of the English source posts.
 - Avoid literal translation patterns such as "eto imeet smysl dlya" when Russian would say "eto vazhno dlya" or "eto obyasnyaet".
-- Keep paragraphs short: 2-4 lines in a Telegram message.
+- Keep sentences short. A good average is 10-18 words.
+- Keep paragraphs short: 2-4 sentences and one idea per paragraph.
 - Use numbers, names, links, tickers, and dates exactly as in sources unless explicitly translating a date format.
 - Keep emojis only when they fit the Russian article tone.
 - Do not overuse exclamation marks, rhetorical questions, or salesy calls to action.
 - Do not use clickbait templates like "vy ne poverite", "vse ahnuli", "to, chto proizoshlo dalshe", or hidden-subject intrigue.
 - Do not turn a one-line market signal into broad investment advice.
+- Do not write like Bloomberg, Reuters, РБК, or an official analytical report.
+- Never use bureaucratic phrases such as `формируется противоречивая картина`, `усилилась геополитическая составляющая`, `фундаментальные факторы`, `по итогам дня`, `в краткосрочной перспективе`, `при этом следует отметить`, or `одновременно наблюдается`.
+- Explain complex terms such as EIA, SPR, Brent, and FOMC in simple words when they appear in the source material.
 
 ## LLM Editing Rules
 
@@ -155,15 +168,15 @@ Typical edits after an LLM draft:
 Publish only when all checks pass:
 
 - the title is under 140 characters and contains no link;
-- the title names the real subject instead of hiding it;
+- the title creates honest curiosity and names enough of the real subject to avoid hidden-subject intrigue;
 - every title hook is answered in the article body;
-- the paragraph after the title starts with a date-frame summary;
+- the first paragraph explains what happened, why it matters, and why the reader should continue;
 - the first paragraph can stand alone as a Dzen card description;
 - the article uses several source posts or honestly stays short when material is thin;
 - all numbers, dates, names, tickers, sources, and links are preserved accurately;
 - the text does not give investment advice;
 - the text does not invent causes, predictions, quotes, or statistics;
-- the tone is natural Russian market-news prose, not promotional, robotic, or sensational;
+- the tone is natural Russian financial journalism, not promotional, robotic, bureaucratic, or sensational;
 - the full bridge message stays below Telegram's 4096-character transport limit.
 
 ## Moderation Guardrails

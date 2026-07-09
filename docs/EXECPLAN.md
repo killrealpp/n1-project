@@ -61,6 +61,7 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-06) Switched the production LLM path fully to OpenRouter: default providers are OpenRouter, `.env.example` no longer requires Ollama, `--doctor` skips Ollama, and server docs use `screen`.
 - [x] (2026-07-07) Fixed recurring translation validation noise for ordinal/magnitude suffixes and ticker-only rows; added `TRANSLATION_MAX_ATTEMPTS` and `--list-failed-translations`.
 - [x] (2026-07-07) Switched short-post translation model to `deepseek/deepseek-v4-flash` and Dzen article generation to `openai/gpt-5.3-chat`.
+- [x] (2026-07-08) Reworked Dzen article writing rules toward human financial journalism: story-driven openings, honest intrigue, short readable paragraphs, explicit cause-and-effect explanations, banned bureaucratic phrases, and no forced standalone `Сводка за ...` date line.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -184,6 +185,10 @@ The user wants one automation system that reads new English posts from a source 
   Rationale: strict validation is useful, but endless retries for deterministic validation failures create noisy logs and repeated admin alerts without making progress.
   Date/Author: 2026-07-07 / Codex.
 
+- Decision: Dzen articles should read like human financial journalism, not like a dry market digest with a mandatory date-frame line.
+  Rationale: the user clarified that article retention and CTR need a stronger story shape: honest intrigue in the headline, an opening that immediately explains what happened and why it matters, simple cause-and-effect explanations, short paragraphs, and no bureaucratic style.
+  Date/Author: 2026-07-08 / Codex.
+
 ## Outcomes & Retrospective
 
 The repository is now prepared for implementation: env contract, publishing tests, Dzen research, project guide, Obsidian knowledge base, and this execution plan exist. The next meaningful outcome is a running local Python service that can read one source Telegram message, translate it through Ollama, and enqueue platform publishing without duplicates.
@@ -237,6 +242,8 @@ Update 2026-07-06: production LLM strategy changed to OpenRouter-only. `Settings
 Update 2026-07-07: repeated server translation failures were traced to validator edge cases and unbounded retry noise. Number validation now understands English ordinal and magnitude suffixes such as `250th`, `$20M`, and attached `bps`/`pp` forms; ticker-only source rows can pass without Cyrillic when there is no translatable English, while untranslated all-caps news is still rejected; failed translation rows stop automatic retries after `TRANSLATION_MAX_ATTEMPTS`; and `--list-failed-translations` shows stuck rows for diagnosis. Validation: `python -m pytest` passes 64 tests, `python -m compileall -q src tests` completes, and direct checks for the observed problem patterns behave correctly.
 
 Update 2026-07-07: short-post translation now uses `deepseek/deepseek-v4-flash` through OpenRouter, while Dzen article generation uses `openai/gpt-5.3-chat`. Local `.env`, `.env.example`, config defaults, server/runbook docs, tests, and LLM strategy pages were aligned. Validation: `--doctor` reports both configured models, `python -m pytest` passes 64 tests, and `python -m compileall -q src tests` completes.
+
+Update 2026-07-08: Dzen article style now follows the user's human-editor prompt. The runtime prompt asks for a readable financial story instead of a news list, bans bureaucratic phrases, explains complex market terms in plain Russian, and requires the first paragraph to answer what happened, why it matters, and why to continue. The formatter no longer injects a standalone `Сводка за ...` line automatically.
 
 ## Context and Orientation
 
@@ -512,3 +519,5 @@ Revision note 2026-07-06 / Codex: updated after adding slot-based Russian date l
 Revision note 2026-07-06 / Codex: updated after preparing GitHub/server deployment docs, sanitizing commit-ready files, checking ignored secrets/runtime data, and recording local Ollama/MAX readiness caveats.
 
 Revision note 2026-07-06 / Codex: updated after switching production LLM usage to OpenRouter-only, repairing Russian article-prompt text, and changing server operation guidance from systemd/Ollama to screen/OpenRouter.
+
+Revision note 2026-07-08 / Codex: updated after applying the user's human Dzen article prompt and removing forced standalone date-summary formatting from generated articles.

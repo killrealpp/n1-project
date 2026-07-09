@@ -18,35 +18,44 @@ def test_translation_prompt_requests_strict_literal_translation() -> None:
 def test_article_prompt_requests_theme_grouping() -> None:
     prompt = article_user_prompt(["BTC is higher", "RGBI is below 112"], 2500, 3900)
 
-    assert "Group related items by theme" in prompt
-    assert "markets, macro, companies, crypto" in prompt
-    assert "between 2500 and 3900 characters" in prompt
-    assert "Dzen generates the card description from early text" in prompt
-    assert "Do not give investment advice" in prompt
-    assert "Make the title concrete" in prompt
-    assert "Make the title worth opening" in prompt
-    assert "candidate pool, not as a mandatory checklist" in prompt
-    assert "clear semantic cluster" in prompt
-    assert "Сводка за день" in prompt
-    assert "Standalone date-summary line" in prompt
-    assert "Do not merge the title, date summary, and body into one paragraph" in prompt
-    assert "body must directly pay off every hook" in prompt
-    assert "do not inflate one short signal into a long article" in prompt
-    assert "dependency-grammar-friendly sentence structure" in prompt
-    assert "Keep the subject, verb, and object close" in prompt
-    assert "Final quality gate" in prompt
+    assert "от 2500 до 3900 символов" in prompt
+    assert "Пиши на русском языке" in prompt
+    assert "не обязательным чек-листом" in prompt
+    assert "складываются в понятную тему" in prompt
+    assert "3-6 связанных постов" in prompt
+    assert "Не давай инвестиционных советов" in prompt
+    assert "Dzen" in prompt or "Дзена" in prompt
+    assert "Первый абзац должен работать как описание карточки Дзена" in prompt
+    assert "Тело статьи обязано прямо ответить" in prompt
+    assert "Не превращай статью в список новостей" in prompt
+    assert "Не раздувай один короткий сигнал" in prompt
+    assert "Держи подлежащее, сказуемое и дополнение рядом" in prompt
+    assert "Проверка перед выдачей" in prompt
+
+
+def test_article_prompt_requests_human_dzen_style() -> None:
+    prompt = article_user_prompt(["Brent is above $80 - EIA"], 2500, 3900)
+
+    assert "опытный финансовый журналист" in prompt
+    assert "как Bloomberg, Reuters, РБК" in prompt
+    assert "формируется противоречивая картина" in prompt
+    assert "Что произошло" in prompt
+    assert "Почему это важно" in prompt
+    assert "По данным" in prompt
+    assert "Средняя длина - 10-18 слов" in prompt
+    assert "рынок остается чувствительным" in prompt
 
 
 def test_article_prompt_accepts_review_note() -> None:
-    prompt = article_user_prompt(["BTC is higher"], 2500, 3900, review_note="Previous draft was rejected.")
+    prompt = article_user_prompt(["BTC is higher"], 2500, 3900, review_note="Предыдущий черновик отклонен.")
 
-    assert "Editor note for this revision" in prompt
-    assert "Previous draft was rejected." in prompt
+    assert "Заметка редактора для этой правки" in prompt
+    assert "Предыдущий черновик отклонен." in prompt
 
 
 def test_article_prompt_accepts_article_date() -> None:
     prompt = article_user_prompt(["BTC is higher"], 2500, 3900, article_date_label="6 июля 2026 года")
 
-    assert "Сводка за 6 июля 2026 года" in prompt
-    assert "There is one blank line after the title" in prompt
-    assert "The date-summary line is standalone" in prompt
+    assert "Контекст даты статьи: 6 июля 2026 года" in prompt
+    assert "Первая строка - заголовок Дзена" in prompt
+    assert "не делай сухую отдельную строку `Сводка за ...`" in prompt

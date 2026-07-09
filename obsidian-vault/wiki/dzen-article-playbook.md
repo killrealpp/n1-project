@@ -15,7 +15,7 @@ A Dzen article for this project should be a concise Russian editorial digest bui
 
 ## Writing Pattern
 
-The title should name the topic clearly and honestly. It should be strong enough to open through a real tension, consequence, unusual combination, exact figure, or sharp market question from the source posts. The opening should start with a date frame such as `Сводка за 6 июля 2026 года:` and then tell the reader what happened and why it matters. Each body block should explain one idea from the source posts. The conclusion should state what changed or what to watch next.
+The title should create honest curiosity from the real source facts. It should be strong enough to open through a real tension, consequence, unusual combination, exact figure, or sharp market question from the source posts. The opening should immediately tell the reader what happened, why it matters, and why the article is worth finishing. Do not force a standalone date line such as `Сводка за 6 июля 2026 года:`; the date can appear naturally only when useful. Each body block should explain one idea from the source posts. The conclusion should state what matters now and what investors will watch next.
 
 For `@num1_ch`, a useful article is normally a themed market digest from several posts, not an expanded version of one short signal. The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=10` by default, and the draft should usually use the best related subset from those candidates instead of mentioning every candidate.
 
@@ -37,6 +37,14 @@ The title and first paragraph are the traffic gate. Make the card concrete befor
 
 Useful title shapes for this project:
 
+- `Почему рынок испугался...`;
+- `Что произошло...`;
+- `Что теперь будет...`;
+- `Почему это важно...`;
+- `Что означает...`;
+- `Что изменилось...`;
+- `Рынок получил неожиданный сигнал...`;
+- `Инвесторы не ожидали...`;
 - fact + consequence;
 - list of concrete market items + unifying point;
 - event/fact + restrained question: what changed, why it matters, what to watch;
@@ -52,7 +60,7 @@ Adapted lessons from Dzen headline practice:
 
 Avoid generic titles such as `Main market news of the day`. Avoid hidden-subject intrigue, fake quotes, exaggerated drama, invented conflict, unsupported negative framing, and shock wording. If a hook appears in the title, the article body must pay it off directly.
 
-The first paragraph should work as Dzen's generated card description: name the theme, the affected markets/companies, and the reason the digest is worth reading.
+The first paragraph should work as Dzen's generated card description: explain what happened, why it matters, and why the reader should continue.
 
 Examples of acceptable project title shapes:
 
@@ -98,6 +106,8 @@ Typical edits after an LLM draft:
 
 Human readability rules:
 
+- write like an experienced financial journalist explaining the topic to a friend, not like Bloomberg, Reuters, РБК, or an official analytical report;
+- avoid bureaucratic phrases such as `формируется противоречивая картина`, `усилилась геополитическая составляющая`, `фундаментальные факторы`, `по итогам дня`, `в краткосрочной перспективе`, `при этом следует отметить`, and `одновременно наблюдается`;
 - use dependency-grammar-friendly structure: words that depend on each other should stay close;
 - keep subject, verb, and object close when Russian syntax allows it;
 - put the main fact early in the sentence;
@@ -106,21 +116,23 @@ Human readability rules:
 - keep one paragraph to one idea;
 - split sentences that carry two separate ideas;
 - remove robotic transitions unless they are truly needed.
+- keep most sentences around 10-18 words;
+- explain complex terms such as EIA, SPR, Brent, and FOMC in plain Russian when they appear in sources.
 
 ## Quality Gate
 
 Publish only when all checks pass:
 
 - the title is under 140 characters and contains no link;
-- the title names the real subject instead of hiding it;
+- the title creates honest curiosity and names enough of the real subject to avoid hidden-subject intrigue;
 - every title hook is answered in the article body;
-- the paragraph after the title starts with a date-frame summary;
+- the first paragraph explains what happened, why it matters, and why the reader should continue;
 - the first paragraph can stand alone as a Dzen card description;
 - the article uses several source posts or honestly stays short when material is thin;
 - all numbers, dates, names, tickers, sources, and links are preserved accurately;
 - the text does not give investment advice;
 - the text does not invent causes, predictions, quotes, or statistics;
-- the tone is natural Russian market-news prose, not promotional, robotic, or sensational;
+- the tone is natural Russian financial journalism, not promotional, robotic, bureaucratic, or sensational;
 - the full bridge message stays below Telegram's 4096-character transport limit.
 
 ## Voice

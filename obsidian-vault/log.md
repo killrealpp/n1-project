@@ -227,3 +227,7 @@ Investigated server row `4923`, where a symbol-only market signal `🇷🇺 KZOS
 ## [2026-07-08] fix | Model numbers and L1 validation noise
 
 Investigated server rows `4963` and `5323`. Row `4963` translated source `F35` naturally as `F-35`, which surfaced as a false `added numbers: 35`; row `5323` translated `L1`/`Layer-1` as `первого уровня`, which surfaced as a false `missing numbers: 1`. Number validation now extracts digits from compact model/market codes such as `F35`, `F-35`, `L1`, and `Layer-1`, recognizes Russian ordinal `первого уровня`-style level wording, and treats `50ms` as the same number as `50 миллисекунд`. Added regression tests for both observed rows. Translation failure admin notifications now fire on the first and final retry attempt, while middle retries stay in local logs, reducing repeated Telegram error noise.
+
+## [2026-07-08] implementation | Human Dzen article style
+
+Applied the user's new Dzen article prompt. The runtime article prompt now asks for readable human financial journalism instead of a dry market digest: honest headline intrigue, immediate explanation in the first paragraph, short sentences and paragraphs, cause-and-effect links, simple explanations for market terms, and a ban on bureaucratic phrases. The formatter no longer injects a standalone `Сводка за ...` date line, so generated drafts can open like real articles. Added `raw/2026-07-08-dzen-human-article-prompt.md`, updated the prompt/playbooks/runbook/ExecPlan, and verified targeted prompt and validator tests pass.

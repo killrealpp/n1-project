@@ -25,6 +25,7 @@ This vault is the project memory for the Telegram-to-Russian publishing automati
 - [[raw/2026-07-03-source-channel-num1]] - public preview observations from `@num1_ch`.
 - [[raw/2026-07-06-dmitriev-dzen-method]] - researched Dmitriev Dzen navigation post, linked tutorials, headline models, posting time, and AI workflow notes.
 - [[raw/2026-07-06-human-writing-openrouter]] - OpenRouter/GPT and dependency-grammar/plain-language writing notes for Dzen articles.
+- [[raw/2026-07-08-dzen-human-article-prompt]] - user-supplied prompt for more human, story-driven Dzen financial articles.
 
 ## Operating Files
 

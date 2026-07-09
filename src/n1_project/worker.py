@@ -433,11 +433,11 @@ async def draft_dzen_article_with_validation(
         if not issues:
             return article, []
         note = (
-            "The previous draft failed validation and must be rewritten.\n"
-            f"Validation issues: {'; '.join(issues)}.\n"
-            "Return a new article where the first sentence is a short Dzen title under 140 characters, "
-            "contains no links, and ends as its own sentence before the opening paragraph. "
-            "Keep the article within the requested character limits and preserve only source-grounded facts."
+            "Предыдущий черновик не прошел валидацию и должен быть переписан.\n"
+            f"Проблемы проверки: {'; '.join(issues)}.\n"
+            "Верни новую статью, где первое предложение - короткий заголовок Дзена до 140 символов, "
+            "без ссылок и как отдельное предложение перед первым абзацем. "
+            "Уложись в заданный диапазон длины и сохраняй только факты из исходных постов."
         )
         if review_note:
             note = review_note + "\n\n" + note
@@ -794,9 +794,9 @@ async def handle_article_reject(
 
     posts = [message.translated_text or "" for message in messages]
     review_note = (
-        "Previous draft was rejected by the editor. Generate a meaningfully different and stronger version. "
-        "Improve the title/card, keep every fact source-grounded, avoid repeating the rejected wording, "
-        "and make the Russian prose more human and direct."
+        "Предыдущий черновик отклонен редактором. Сделай заметно другой и более сильный вариант. "
+        "Улучши заголовок и первый экран, сохраняй каждый факт привязанным к источникам, "
+        "не повторяй формулировки отклоненного текста и сделай русский стиль живее и прямее."
     )
     new_text, issues = await draft_dzen_article_with_validation(
         model,

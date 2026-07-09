@@ -329,13 +329,6 @@ def format_dzen_article_text(text: str, article_date_label: str | None = None) -
 
     rest = normalize_article_paragraphs(rest)
     blocks = [title]
-    if article_date_label:
-        summary = f"Сводка за {article_date_label}:"
-        if rest.lower().startswith("сводка за "):
-            summary_candidate, summary_rest = rest.split(":", 1) if ":" in rest else (summary, "")
-            summary = summary_candidate.strip() + ":"
-            rest = summary_rest.strip()
-        blocks.append(summary)
     if rest:
         blocks.append(rest)
     return "\n\n".join(blocks)

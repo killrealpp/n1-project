@@ -261,7 +261,7 @@ def test_ensure_title_is_sentence_adds_period_to_short_title_line() -> None:
     assert validate_dzen_bridge_article(normalized, min_chars=1, max_chars=500) == []
 
 
-def test_format_dzen_article_text_separates_title_summary_and_body() -> None:
+def test_format_dzen_article_text_separates_title_and_body() -> None:
     text = (
         "Ипотека снова ускорилась. Сводка за 6 июля 2026 года: "
         "DOM RF сообщил о росте выдач, а ВТБ отметил увеличение в 1,5 раза."
@@ -271,19 +271,17 @@ def test_format_dzen_article_text_separates_title_summary_and_body() -> None:
 
     assert formatted == (
         "Ипотека снова ускорилась.\n\n"
-        "Сводка за 6 июля 2026 года:\n\n"
-        "DOM RF сообщил о росте выдач, а ВТБ отметил увеличение в 1,5 раза."
+        "Сводка за 6 июля 2026 года: DOM RF сообщил о росте выдач, а ВТБ отметил увеличение в 1,5 раза."
     )
 
 
-def test_format_dzen_article_text_adds_missing_date_summary() -> None:
+def test_format_dzen_article_text_does_not_add_missing_date_summary() -> None:
     text = "Крипторынок получил новый сигнал. Bitcoin вырос, а Ethereum сохранил обороты."
 
     formatted = format_dzen_article_text(text, article_date_label="6 июля 2026 года")
 
     assert formatted == (
         "Крипторынок получил новый сигнал.\n\n"
-        "Сводка за 6 июля 2026 года:\n\n"
         "Bitcoin вырос, а Ethereum сохранил обороты."
     )
 
