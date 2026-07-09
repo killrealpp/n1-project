@@ -10,6 +10,15 @@ NUMBER_RE = re.compile(
     r"(?!\w)",
     re.IGNORECASE,
 )
+DATE_RE = re.compile(
+    r"(?<![\d.])"
+    r"(?:"
+    r"(?P<ymd_year>\d{4})[./-](?P<ymd_month>\d{1,2})[./-](?P<ymd_day>\d{1,2})"
+    r"|"
+    r"(?P<dmy_day>\d{1,2})[./-](?P<dmy_month>\d{1,2})[./-](?P<dmy_year>\d{4})"
+    r")"
+    r"(?![\d.])"
+)
 PERIOD_NUMBER_RE = re.compile(r"\b[HQ]([1-4])\b", re.IGNORECASE)
 ALNUM_MODEL_NUMBER_RE = re.compile(r"\b[A-ZА-Я]{1,8}-?(\d{1,4})(?:[A-ZА-Яa-zа-я])?\b")
 LAYER_NUMBER_RE = re.compile(r"\b(?:L|Layer)[-\s]?([1-4])\b", re.IGNORECASE)
@@ -110,11 +119,43 @@ def extract_urls(text: str) -> set[str]:
     return set(URL_RE.findall(text))
 
 
+def canonical_date_token(match: re.Match[str]) -> str | None:
+    if match.group("ymd_year"):
+        year = int(match.group("ymd_year"))
+        month = int(match.group("ymd_month"))
+        day = int(match.group("ymd_day"))
+    else:
+        year = int(match.group("dmy_year"))
+        month = int(match.group("dmy_month"))
+        day = int(match.group("dmy_day"))
+    if not 1 <= month <= 12 or not 1 <= day <= 31:
+        return None
+    return f"date:{year:04d}-{month:02d}-{day:02d}"
+
+
+def extract_date_tokens(text: str) -> set[str]:
+    tokens: set[str] = set()
+    for match in DATE_RE.finditer(text):
+        token = canonical_date_token(match)
+        if token:
+            tokens.add(token)
+    return tokens
+
+
+def mask_date_tokens(text: str) -> str:
+    def replacement(match: re.Match[str]) -> str:
+        return " " if canonical_date_token(match) else match.group(0)
+
+    return DATE_RE.sub(replacement, text)
+
+
 def extract_numbers(text: str) -> set[str]:
-    numbers = set(NUMBER_RE.findall(text))
-    numbers.update(PERIOD_NUMBER_RE.findall(text))
-    numbers.update(ALNUM_MODEL_NUMBER_RE.findall(text))
-    numbers.update(LAYER_NUMBER_RE.findall(text))
+    numbers = extract_date_tokens(text)
+    number_text = mask_date_tokens(text)
+    numbers.update(NUMBER_RE.findall(number_text))
+    numbers.update(PERIOD_NUMBER_RE.findall(number_text))
+    numbers.update(ALNUM_MODEL_NUMBER_RE.findall(number_text))
+    numbers.update(LAYER_NUMBER_RE.findall(number_text))
     normalized = text.lower()
     for value, patterns in RU_PERIOD_WORD_PATTERNS.items():
         if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):

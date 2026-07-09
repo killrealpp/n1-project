@@ -63,6 +63,50 @@ def test_translation_issues_allow_number_before_terminal_period() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_calendar_date_reordering() -> None:
+    source = (
+        "\U0001f4c5\U0001f5d3 CALENDAR FOR TODAY - 2026.07.09\n\n"
+        "\U0001f1e8\U0001f1f3 China - CPI consumer inflation (June) - 04:30 MSK\n"
+        "\U0001f1ea\U0001f1fa ECB minutes from the last meeting - 14:30 MSK\n"
+        "\U0001f1fa\U0001f1f8 US - Initial jobless claims - 15:30 MSK\n"
+        "\U0001f1fa\U0001f1f8 US - Existing home sales (June) - 17:00 MSK\n"
+        "\U0001f6e2\ufe0f US natural gas - EIA inventories - 17:30 MSK\n\n"
+        "\U0001f1f7\U0001f1fa Dividend cutoff: $PLZL\n\n"
+        "\U0001f1f7\U0001f1fa $MGKL MGKL - Investor Day\n\n"
+        "\U0001f1f7\U0001f1fa Trading in settlement futures on ETF iShares MSCI South Korea ETF "
+        "will start on the Moscow Exchange derivatives market"
+    )
+    output = (
+        "\U0001f4c5\U0001f5d3 \u041a\u0410\u041b\u0415\u041d\u0414\u0410\u0420\u042c "
+        "\u041d\u0410 \u0421\u0415\u0413\u041e\u0414\u041d\u042f - 09.07.2026\n\n"
+        "\U0001f1e8\U0001f1f3 \u041a\u0438\u0442\u0430\u0439 - "
+        "\u041f\u043e\u0442\u0440\u0435\u0431\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u0430\u044f "
+        "\u0438\u043d\u0444\u043b\u044f\u0446\u0438\u044f CPI (\u0438\u044e\u043d\u044c) - 04:30 \u041c\u0421\u041a\n"
+        "\U0001f1ea\U0001f1fa \u041f\u0440\u043e\u0442\u043e\u043a\u043e\u043b "
+        "\u0415\u0426\u0411 \u0441 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0435\u0433\u043e "
+        "\u0437\u0430\u0441\u0435\u0434\u0430\u043d\u0438\u044f - 14:30 \u041c\u0421\u041a\n"
+        "\U0001f1fa\U0001f1f8 \u0421\u0428\u0410 - \u041f\u0435\u0440\u0432\u0438\u0447\u043d\u044b\u0435 "
+        "\u0437\u0430\u044f\u0432\u043a\u0438 \u043d\u0430 \u043f\u043e\u0441\u043e\u0431\u0438\u0435 "
+        "\u043f\u043e \u0431\u0435\u0437\u0440\u0430\u0431\u043e\u0442\u0438\u0446\u0435 - 15:30 \u041c\u0421\u041a\n"
+        "\U0001f1fa\U0001f1f8 \u0421\u0428\u0410 - \u041f\u0440\u043e\u0434\u0430\u0436\u0438 "
+        "\u0436\u0438\u043b\u044c\u044f \u043d\u0430 \u0432\u0442\u043e\u0440\u0438\u0447\u043d\u043e\u043c "
+        "\u0440\u044b\u043d\u043a\u0435 (\u0438\u044e\u043d\u044c) - 17:00 \u041c\u0421\u041a\n"
+        "\U0001f6e2\ufe0f \u041f\u0440\u0438\u0440\u043e\u0434\u043d\u044b\u0439 \u0433\u0430\u0437 "
+        "\u0421\u0428\u0410 - \u0417\u0430\u043f\u0430\u0441\u044b \u043f\u043e "
+        "\u0434\u0430\u043d\u043d\u044b\u043c EIA - 17:30 \u041c\u0421\u041a\n\n"
+        "\U0001f1f7\U0001f1fa \u0414\u0430\u0442\u0430 \u043e\u0442\u0441\u0435\u0447\u043a\u0438 "
+        "\u043f\u043e \u0434\u0438\u0432\u0438\u0434\u0435\u043d\u0434\u0430\u043c: $PLZL\n\n"
+        "\U0001f1f7\U0001f1fa $MGKL MGKL - \u0414\u0435\u043d\u044c \u0438\u043d\u0432\u0435\u0441\u0442\u043e\u0440\u0430\n\n"
+        "\U0001f1f7\U0001f1fa \u041d\u0430\u0447\u043d\u0443\u0442\u0441\u044f \u0442\u043e\u0440\u0433\u0438 "
+        "\u0440\u0430\u0441\u0447\u0435\u0442\u043d\u044b\u043c\u0438 \u0444\u044c\u044e\u0447\u0435\u0440\u0441\u0430\u043c\u0438 "
+        "\u043d\u0430 iShares MSCI South Korea ETF \u043d\u0430 \u0441\u0440\u043e\u0447\u043d\u043e\u043c "
+        "\u0440\u044b\u043d\u043a\u0435 \u041c\u043e\u0441\u043a\u043e\u0432\u0441\u043a\u043e\u0439 "
+        "\u0431\u0438\u0440\u0436\u0438"
+    )
+
+    assert translation_issues(source, output) == []
+
+
 def test_translation_issues_allow_removed_thousands_separator() -> None:
     source = "Net income rose to 6,400 million rubles - IF"
     output = "\u0427\u0438\u0441\u0442\u0430\u044f \u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0432\u044b\u0440\u043e\u0441\u043b\u0430 \u0434\u043e 6400 \u043c\u043b\u043d \u0440\u0443\u0431\u043b\u0435\u0439 - IF"

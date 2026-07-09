@@ -231,3 +231,7 @@ Investigated server rows `4963` and `5323`. Row `4963` translated source `F35` n
 ## [2026-07-08] implementation | Human Dzen article style
 
 Applied the user's new Dzen article prompt. The runtime article prompt now asks for readable human financial journalism instead of a dry market digest: honest headline intrigue, immediate explanation in the first paragraph, short sentences and paragraphs, cause-and-effect links, simple explanations for market terms, and a ban on bureaucratic phrases. The formatter no longer injects a standalone `Сводка за ...` date line, so generated drafts can open like real articles. Added `raw/2026-07-08-dzen-human-article-prompt.md`, updated the prompt/playbooks/runbook/ExecPlan, and verified targeted prompt and validator tests pass.
+
+## [2026-07-09] fix | Calendar date translation validation
+
+Investigated server row `7192`, where a calendar post date `2026.07.09` was validly translated as `09.07.2026` but failed number preservation with `missing numbers: 2026.07` and `added numbers: 09.07`. Number extraction now recognizes full dates in `YYYY.MM.DD` and `DD.MM.YYYY` forms, normalizes them to the same canonical date token, and masks the date before ordinary number extraction so partial date fragments are not compared as separate numbers. Added a regression test for the observed calendar post shape. Verified `python -m pytest -q` passes 82 tests and `python -m compileall -q src tests` succeeds.
