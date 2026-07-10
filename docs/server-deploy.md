@@ -22,7 +22,7 @@ Expected:
 
 - tests pass;
 - compileall prints nothing;
-- `--doctor` shows Telegram MTProto, Telegram target, VK, Dzen bridge, admin review, and OpenRouter settings ready;
+- `--doctor` shows Telegram MTProto, Telegram target, VK, Dzen bridge channels, direct article publishing, footer links, and OpenRouter settings ready;
 - `max_ready=false` is acceptable until `MAX_CHAT_ID` is filled;
 - `.env` and `data/n1_project.sqlite3` are ignored by git.
 
@@ -157,11 +157,27 @@ Fill these values from the local working `.env`:
     ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=25
 
     DZEN_TELEGRAM_BRIDGE_CHAT_ID=<real_dzen_bridge_chat_id>
+    DZEN_ARTICLE_CHANNELS=russia,energy,tech
+    DZEN_RUSSIA_TELEGRAM_BRIDGE_CHAT_ID=<real_russia_bridge_chat_id>
+    DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID=<real_energy_bridge_chat_id>
+    DZEN_ENERGY_TELEGRAM_BOT_TOKEN=<energy_bot_token>
+    DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID=<real_tech_bridge_chat_id>
+    DZEN_TECH_TELEGRAM_BOT_TOKEN=<tech_bot_token>
     DZEN_DAILY_ARTICLES_ENABLED=true
     DZEN_DAILY_ARTICLE_TIMES=18:00
-    DZEN_ARTICLE_MIN_POSTS=8
-    DZEN_ARTICLE_CANDIDATE_LIMIT=10
-    DZEN_ARTICLE_REVIEW_ENABLED=true
+    DZEN_ARTICLE_WINDOWS=russia=09:00-10:00|14:00-15:00|18:30-19:30;energy=09:20-10:20|14:25-15:25|19:15-20:15;tech=09:40-10:40|14:50-15:50|20:00-21:00
+    DZEN_ARTICLE_RANDOMIZE_TIMES=true
+    DZEN_ARTICLE_SLOT_WINDOW_MINUTES=5
+    DZEN_ARTICLE_PARSE_MODE=HTML
+    DZEN_ARTICLE_FOOTER_ENABLED=true
+    DZEN_ARTICLE_FOOTER_POLICY=evening
+    DZEN_ARTICLE_FOOTER_ROTATE=true
+    DZEN_ARTICLE_FOOTER_TELEGRAM_URL=<telegram_url>
+    DZEN_ARTICLE_FOOTER_VK_URL=<vk_url>
+    DZEN_ARTICLE_FOOTER_MAX_URL=<max_url>
+    DZEN_ARTICLE_MIN_POSTS=3
+    DZEN_ARTICLE_CANDIDATE_LIMIT=30
+    DZEN_ARTICLE_REVIEW_ENABLED=false
     DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS=5
     DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS=3
     DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true
@@ -207,7 +223,10 @@ Expected:
 - `vk_ready=true`;
 - `dzen_bridge_ready=true`;
 - `admin_notifications_ready=true`;
-- `dzen_article_review_ready=true`;
+- `dzen_article_review_enabled=false`;
+- `dzen_article_publish_channels_ready=3`;
+- `dzen_article_channel_specific_bots_ready=2`;
+- `dzen_article_footer.links_configured.telegram/vk/max=true`;
 - `translation_provider=openrouter`;
 - `openrouter_ready=true`;
 - `ollama.skipped=true` when both translation and articles use OpenRouter;
@@ -234,11 +253,17 @@ Publish one reviewed row for real:
 
     sudo -u n1 .venv/bin/python -m n1_project.worker --publish-row <row_id>
 
-Generate a Dzen article review draft without publishing:
+Preview a Dzen article prompt or generate an article only when you deliberately want a real bridge post. Current production mode publishes directly because `DZEN_ARTICLE_REVIEW_ENABLED=false`.
+
+Prompt-only preview:
+
+    sudo -u n1 .venv/bin/python -m n1_project.worker --print-article-prompt
+
+Real forced article publication for a manual smoke test:
 
     sudo -u n1 .venv/bin/python -m n1_project.worker --once --article --force-article
 
-The draft should arrive in the personal Telegram DM configured by `ADMIN_TELEGRAM_CHAT_ID`.
+The article should publish to the first configured article channel, normally `russia`. Use this only when a real test publication is acceptable.
 
 ## 10. Run Worker In screen
 

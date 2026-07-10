@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import re
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
@@ -67,6 +68,8 @@ ROMAN_PERIOD_PATTERNS = {
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
 LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
+BOLD_BLOCK_RE = re.compile(r"^\s*<b>[^<]{1,120}</b>\s*$", re.IGNORECASE)
+HTML_TAG_RE = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>")
 EMOJI_RE = re.compile(r"[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF\u2600-\u27BF]")
 LEADING_EMOJI_RE = re.compile(r"^\s*((?:[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF\u2600-\u27BF]\ufe0f?\s*)+)")
 KNOWN_ATTRIBUTIONS = {
@@ -351,6 +354,12 @@ def normalize_article_paragraphs(text: str) -> str:
     blocks: list[str] = []
     current: list[str] = []
     for line in lines:
+        if BOLD_BLOCK_RE.fullmatch(line):
+            if current:
+                blocks.append(" ".join(current))
+                current = []
+            blocks.append(line)
+            continue
         if line:
             current.append(line)
             continue
@@ -360,6 +369,15 @@ def normalize_article_paragraphs(text: str) -> str:
     if current:
         blocks.append(" ".join(current))
     return "\n\n".join(blocks)
+
+
+def sanitize_article_html(text: str) -> str:
+    open_marker = "\uE000B_OPEN\uE000"
+    close_marker = "\uE000B_CLOSE\uE000"
+    protected = re.sub(r"<\s*b\s*>", open_marker, text, flags=re.IGNORECASE)
+    protected = re.sub(r"<\s*/\s*b\s*>", close_marker, protected, flags=re.IGNORECASE)
+    escaped = html.escape(protected, quote=False)
+    return escaped.replace(open_marker, "<b>").replace(close_marker, "</b>")
 
 
 def format_dzen_article_text(text: str, article_date_label: str | None = None) -> str:
@@ -372,7 +390,20 @@ def format_dzen_article_text(text: str, article_date_label: str | None = None) -
     blocks = [title]
     if rest:
         blocks.append(rest)
-    return "\n\n".join(blocks)
+    return sanitize_article_html("\n\n".join(blocks))
+
+
+def article_html_issues(text: str) -> list[str]:
+    issues: list[str] = []
+    for match in HTML_TAG_RE.finditer(text):
+        if match.group(1).lower() != "b":
+            issues.append(f"unsupported HTML tag: {match.group(0)}")
+    if text.lower().count("<b>") != text.lower().count("</b>"):
+        issues.append("unbalanced <b> tags")
+    title = first_sentence(text)
+    if "<b>" in title.lower() or "</b>" in title.lower():
+        issues.append("title contains bold HTML")
+    return issues
 
 
 def validate_dzen_bridge_article(text: str, min_chars: int, max_chars: int) -> list[str]:
@@ -387,6 +418,7 @@ def validate_dzen_bridge_article(text: str, min_chars: int, max_chars: int) -> l
         issues.append(f"title too long: {len(title)} chars; max is 140")
     if extract_urls(title):
         issues.append("title contains a link")
+    issues.extend(article_html_issues(text))
     return issues
 
 

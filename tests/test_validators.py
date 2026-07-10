@@ -330,6 +330,24 @@ def test_format_dzen_article_text_does_not_add_missing_date_summary() -> None:
     )
 
 
+def test_format_dzen_article_text_preserves_bold_section_blocks() -> None:
+    text = "Market title.\n\n<b>What changed</b>\nBody with RGBI > 114 and spread < 2%."
+
+    formatted = format_dzen_article_text(text)
+
+    assert formatted == "Market title.\n\n<b>What changed</b>\n\nBody with RGBI &gt; 114 and spread &lt; 2%."
+    assert validate_dzen_bridge_article(formatted, min_chars=1, max_chars=500) == []
+
+
+def test_validate_dzen_article_rejects_bold_title_and_unbalanced_tags() -> None:
+    text = "<b>Market title.</b>\n\nBody <b>without close."
+
+    issues = validate_dzen_bridge_article(text, min_chars=1, max_chars=500)
+
+    assert "title contains bold HTML" in issues
+    assert "unbalanced <b> tags" in issues
+
+
 def test_leftover_english_allows_short_attributions_in_russian_text() -> None:
     output = "\u0411\u0438\u0442\u043a\u043e\u0438\u043d \u0432\u044b\u0440\u043e\u0441 \u043d\u0430 5% - CryptoQuant."
 

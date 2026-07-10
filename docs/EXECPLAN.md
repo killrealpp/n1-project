@@ -62,6 +62,10 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-07) Fixed recurring translation validation noise for ordinal/magnitude suffixes and ticker-only rows; added `TRANSLATION_MAX_ATTEMPTS` and `--list-failed-translations`.
 - [x] (2026-07-07) Switched short-post translation model to `deepseek/deepseek-v4-flash` and Dzen article generation to `openai/gpt-5.3-chat`.
 - [x] (2026-07-08) Reworked Dzen article writing rules toward human financial journalism: story-driven openings, honest intrigue, short readable paragraphs, explicit cause-and-effect explanations, banned bureaucratic phrases, and no forced standalone `Сводка за ...` date line.
+- [x] (2026-07-10) Added multi-channel article routing for `russia`, `energy`, and `tech`: three daily randomized windows per channel, topic-filtered unused candidates, channel-specific bridge chat ids, and HTML bold accents for article readability.
+- [x] (2026-07-10) Added persistent queue `topic` storage for article routing and switched current Dzen article behavior to direct bridge publishing with `DZEN_ARTICLE_REVIEW_ENABLED=false`.
+- [x] (2026-07-10) Added channel-specific Dzen Telegram bot tokens so Energy and Tech can publish with bots that already have access to their bridge channels.
+- [x] (2026-07-10) Added rotating Telegram/VK/MAX footer blocks for evening articles only, with env placeholders for the final public links.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -189,6 +193,22 @@ The user wants one automation system that reads new English posts from a source 
   Rationale: the user clarified that article retention and CTR need a stronger story shape: honest intrigue in the headline, an opening that immediately explains what happened and why it matters, simple cause-and-effect explanations, short paragraphs, and no bureaucratic style.
   Date/Author: 2026-07-08 / Codex.
 
+- Superseded decision: Enable Telegram admin review for Dzen article drafts before Dzen bridge publishing.
+  Rationale: the review gate remains available through `DZEN_ARTICLE_REVIEW_ENABLED=true`, but the user now wants scheduled articles to publish immediately to the bridge channels.
+  Date/Author: 2026-07-10 / Codex.
+
+- Decision: Store each queue message's article lane as `messages.topic`.
+  Rationale: channel routing should be stable and inspectable; old rows without a topic can be backfilled during article candidate selection, while new translated rows get a topic immediately.
+  Date/Author: 2026-07-10 / Codex.
+
+- Decision: Allow Dzen article channels to use separate Telegram bot tokens.
+  Rationale: the shared bot can publish to Russia, but Energy and Tech may require bots that already have access to those channels.
+  Date/Author: 2026-07-10 / Codex.
+
+- Decision: Add cross-platform links only to evening channel articles.
+  Rationale: one footer per three articles keeps links visible without making all nine daily articles feel repetitive or promotional.
+  Date/Author: 2026-07-10 / Codex.
+
 ## Outcomes & Retrospective
 
 The repository is now prepared for implementation: env contract, publishing tests, Dzen research, project guide, Obsidian knowledge base, and this execution plan exist. The next meaningful outcome is a running local Python service that can read one source Telegram message, translate it through Ollama, and enqueue platform publishing without duplicates.
@@ -263,7 +283,7 @@ MTProto is Telegram's client protocol. In this project it is used through Teleth
 
 Ollama is a local LLM runtime that exposes Llama models through an HTTP API.
 
-Dzen bridge is the Dzen Telegram sync bot flow where a Telegram post is imported into Dzen. The bridge chat id is `DZEN_TELEGRAM_BRIDGE_CHAT_ID`.
+Dzen bridge is the Dzen Telegram sync bot flow where a Telegram post is imported into Dzen. The Russia bridge can fall back to `DZEN_TELEGRAM_BRIDGE_CHAT_ID`; the current multi-channel setup uses channel-specific bridge chat ids for `russia`, `energy`, and `tech`.
 
 ## Plan of Work
 
@@ -273,11 +293,11 @@ Next, use the existing local session-generation command to log into Telegram onc
 
 The message pipeline exists. A new Telegram source post is inserted into SQLite with status `received`, translated with local Llama when Ollama is available, validated, then published in configured order. Each destination result is recorded.
 
-The Dzen article job exists and is checked inside `--loop`. It collects translated posts since the previous article, generates one 2500-3900 character article using the Dzen article prompt, validates title and length, and sends it to `DZEN_TELEGRAM_BRIDGE_CHAT_ID`.
+The Dzen article job exists and is checked inside `--loop`. It collects translated posts that have not been used in an article, filters them by channel topic, generates a 2500-3900 character article using the Dzen article prompt, appends an evening footer when configured, validates title, length, and allowed HTML, then publishes to the matching channel bridge.
 
 Fifth, add tests for env loading, length guards, id conversion for VK, link/number preservation checks, and deduplication. Add a dry-run mode that produces payloads without sending network requests.
 
-Sixth, prepare server deployment instructions. The server must install Python, project dependencies, Ollama, the chosen Llama model, and `.env` values. The same `TELEGRAM_MTPROTO_SESSION_STRING` can be copied to the server after local verification.
+Sixth, prepare server deployment instructions. The server must install Python, project dependencies, and `.env` values. OpenRouter is the production LLM path, so Ollama is not required on the current server. The same `TELEGRAM_MTPROTO_SESSION_STRING` can be copied to the server after local verification.
 
 ## Concrete Steps
 
@@ -521,3 +541,9 @@ Revision note 2026-07-06 / Codex: updated after preparing GitHub/server deployme
 Revision note 2026-07-06 / Codex: updated after switching production LLM usage to OpenRouter-only, repairing Russian article-prompt text, and changing server operation guidance from systemd/Ollama to screen/OpenRouter.
 
 Revision note 2026-07-08 / Codex: updated after applying the user's human Dzen article prompt and removing forced standalone date-summary formatting from generated articles.
+
+Revision note 2026-07-10 / Codex: updated after adding persistent article topics on queue messages, making old candidate rows backfillable, and switching the current Dzen article flow from admin-button review to direct bridge publishing.
+
+Revision note 2026-07-10 / Codex: updated after adding per-channel Dzen Telegram bot tokens for Energy and Tech bridge publishing.
+
+Revision note 2026-07-10 / Codex: updated after adding the configurable evening-only cross-platform footer for Telegram, VK, and MAX links.

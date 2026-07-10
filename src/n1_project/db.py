@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS messages (
   source_date TEXT,
   source_text TEXT NOT NULL,
   translated_text TEXT,
+  topic TEXT,
   status TEXT NOT NULL DEFAULT 'received',
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
@@ -80,6 +81,13 @@ class QueueDatabase:
             self._migrate(conn)
 
     def _migrate(self, conn: sqlite3.Connection) -> None:
+        message_columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        if "topic" not in message_columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN topic TEXT")
+
         columns = {
             str(row["name"])
             for row in conn.execute("PRAGMA table_info(articles)").fetchall()
@@ -359,6 +367,17 @@ class QueueDatabase:
     def set_manual_translation(self, message_id: int, translated_text: str) -> None:
         self.mark_translated(message_id, translated_text)
 
+    def set_message_topic(self, message_id: int, topic: str | None) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE messages
+                SET topic = ?, updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (topic, message_id),
+            )
+
     def mark_failed(self, message_id: int, status: str, error: str) -> None:
         with self.connect() as conn:
             conn.execute(
@@ -549,7 +568,7 @@ class QueueDatabase:
             rows = conn.execute(
                 f"""
                 SELECT id, source_channel_id, source_message_id, source_text,
-                       translated_text, status, attempts, last_error
+                       translated_text, topic, status, attempts, last_error
                 FROM messages
                 WHERE {where_sql}
                 ORDER BY {order_by}
@@ -567,6 +586,7 @@ class QueueDatabase:
                 status=str(row["status"]),
                 attempts=int(row["attempts"]),
                 last_error=row["last_error"],
+                topic=row["topic"],
             )
             for row in rows
         ]

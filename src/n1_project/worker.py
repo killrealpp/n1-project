@@ -8,10 +8,24 @@ import sys
 import time
 import traceback
 from contextlib import suppress
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 from n1_project.admin import ARTICLE_ACCEPT_PREFIX, ARTICLE_REJECT_PREFIX, AdminNotifier
+from n1_project.article_footer import append_dzen_article_footer, dzen_article_footer_reserve_chars
+from n1_project.article_channels import (
+    ArticleChannel,
+    article_channel_from_slot,
+    article_channel_review_note,
+    classify_message_topic,
+    classify_text_topic,
+    configured_article_channels,
+    daily_article_schedule,
+    default_article_channel,
+    due_article_slots,
+    filter_messages_for_channel,
+)
 from n1_project.config import Settings
 from n1_project.db import QueueDatabase
 from n1_project.domain import ArticleRecord, QueuedMessage, SourcePost
@@ -19,6 +33,7 @@ from n1_project.formatters import prepare_social_post_text
 from n1_project.health import run_health_check
 from n1_project.llm import TextModel, article_user_prompt, build_text_model, translation_user_prompt
 from n1_project.publishers import build_publishers
+from n1_project.publishers.telegram import DzenBridgePublisher
 from n1_project.scheduler import current_slot, local_now
 from n1_project.telegram_public_preview import fetch_public_preview_posts
 from n1_project.telegram_source import TelegramSource
@@ -95,6 +110,37 @@ def should_notify_translation_failure(attempts_before_failure: int, max_attempts
     return attempts_before_failure == 0 or attempts_before_failure + 1 >= max_attempts
 
 
+def translated_message_topic(message: QueuedMessage, translated_text: str | None = None) -> str | None:
+    text = "\n".join(
+        part
+        for part in (
+            translated_text if translated_text is not None else message.translated_text,
+            message.source_text,
+        )
+        if part
+    )
+    return classify_text_topic(text)
+
+
+def save_recomputed_message_topic(
+    db: QueueDatabase,
+    message: QueuedMessage,
+    translated_text: str | None = None,
+) -> str | None:
+    topic = translated_message_topic(message, translated_text=translated_text)
+    if topic != message.topic:
+        db.set_message_topic(message.id, topic)
+    return topic
+
+
+def ensure_message_topic(db: QueueDatabase, message: QueuedMessage) -> QueuedMessage:
+    topic = classify_message_topic(message)
+    if topic != message.topic:
+        db.set_message_topic(message.id, topic)
+        return replace(message, topic=topic)
+    return message
+
+
 async def translate_pending(
     db: QueueDatabase,
     settings: Settings,
@@ -118,7 +164,8 @@ async def translate_pending(
                 print(json.dumps({"row": message.id, "translated_text": translated}, ensure_ascii=False))
             else:
                 db.mark_translated(message.id, translated)
-                logging.info("translated row=%s chars=%s", message.id, len(translated))
+                topic = save_recomputed_message_topic(db, message, translated)
+                logging.info("translated row=%s chars=%s topic=%s", message.id, len(translated), topic or "unknown")
         except Exception as exc:
             if not dry_run:
                 db.mark_failed(message.id, "failed_translation", str(exc))
@@ -174,6 +221,9 @@ async def translate_one_row(
             raise ValueError(translation_validation_error(issues, translated))
         if not dry_run:
             db.mark_translated(message.id, translated)
+            topic = save_recomputed_message_topic(db, message, translated)
+        else:
+            topic = translated_message_topic(message, translated)
         print(
             json.dumps(
                 {
@@ -181,6 +231,7 @@ async def translate_one_row(
                     "ok": True,
                     "status": "dry_run" if dry_run else "translated",
                     "saved": not dry_run,
+                    "topic": topic,
                     "translated_text": translated,
                 },
                 ensure_ascii=False,
@@ -411,20 +462,26 @@ async def draft_dzen_article_with_validation(
     *,
     review_note: str | None = None,
     article_date_label: str | None = None,
+    article_channel: ArticleChannel | None = None,
+    slot_key: str | None = None,
     max_attempts: int = 3,
 ) -> tuple[str, list[str]]:
-    note = review_note
+    note = article_channel_review_note(article_channel, review_note) if article_channel else review_note
     article = ""
     issues: list[str] = []
+    footer_reserve = dzen_article_footer_reserve_chars(settings, slot_key)
+    draft_min_chars = max(500, settings.dzen_article_target_min_chars - footer_reserve)
+    draft_max_chars = max(draft_min_chars, settings.dzen_article_target_max_chars - footer_reserve)
     for attempt in range(1, max_attempts + 1):
         article = await model.write_dzen_article(
             posts,
-            min_chars=settings.dzen_article_target_min_chars,
-            max_chars=settings.dzen_article_target_max_chars,
+            min_chars=draft_min_chars,
+            max_chars=draft_max_chars,
             review_note=note,
             article_date_label=article_date_label,
         )
         article = format_dzen_article_text(article, article_date_label=article_date_label)
+        article = append_dzen_article_footer(article, settings, slot_key)
         issues = validate_dzen_bridge_article(
             article,
             min_chars=settings.dzen_article_target_min_chars,
@@ -439,7 +496,9 @@ async def draft_dzen_article_with_validation(
             "без ссылок и как отдельное предложение перед первым абзацем. "
             "Уложись в заданный диапазон длины и сохраняй только факты из исходных постов."
         )
-        if review_note:
+        if article_channel:
+            note = article_channel_review_note(article_channel, note)
+        elif review_note:
             note = review_note + "\n\n" + note
         logging.warning("Dzen article draft validation failed attempt=%s issues=%s", attempt, "; ".join(issues))
     return article, issues
@@ -466,6 +525,24 @@ async def notify_admin(admin: AdminNotifier, title: str, body: str, *, level: st
         logging.exception("admin notification failed")
 
 
+def dzen_publisher_for_channel(settings: Settings, channel: ArticleChannel, dry_run: bool = False):
+    channel_specific_token = settings.dzen_article_bot_tokens.get(channel.key)
+    if channel.bridge_chat_id and (
+        channel_specific_token or channel.bridge_chat_id != settings.dzen_telegram_bridge_chat_id
+    ):
+        return DzenBridgePublisher(
+            bot_token=channel.bot_token,
+            chat_id=channel.bridge_chat_id,
+            max_chars=settings.dzen_post_max_text_chars,
+            dry_run=dry_run,
+            parse_mode=settings.dzen_article_parse_mode or None,
+        )
+    publisher = build_publishers(settings, dry_run=dry_run).get("dzen")
+    if publisher:
+        return publisher
+    return None
+
+
 async def publish_approved_dzen_article(
     db: QueueDatabase,
     settings: Settings,
@@ -473,9 +550,10 @@ async def publish_approved_dzen_article(
     article: ArticleRecord,
     dry_run: bool,
 ) -> None:
-    publisher = build_publishers(settings, dry_run=dry_run).get("dzen")
+    channel = article_channel_from_slot(settings, article.slot_key)
+    publisher = dzen_publisher_for_channel(settings, channel, dry_run=dry_run)
     if not publisher:
-        error = "DZEN_TELEGRAM_BRIDGE_CHAT_ID or Telegram bot token is not configured"
+        error = f"Dzen bridge is not configured for {channel.key}"
         db.update_article_status(article.id, "failed_publish", error=error)
         await notify_admin(admin, "Dzen publish not configured", error)
         raise ValueError(error)
@@ -493,13 +571,25 @@ async def publish_approved_dzen_article(
     if not result.ok:
         await notify_admin(admin, "Dzen article publish failed", result.error or "unknown publish error")
         raise RuntimeError(f"Dzen publish failed: {result.error}")
-    logging.info("Dzen article published article_id=%s destination=%s", article.id, result.destination_id)
+    logging.info(
+        "Dzen article published article_id=%s channel=%s destination=%s",
+        article.id,
+        channel.key,
+        result.destination_id,
+    )
 
 
-def dzen_article_candidate_messages(db: QueueDatabase, settings: Settings) -> list[QueuedMessage]:
+def dzen_article_candidate_messages(
+    db: QueueDatabase,
+    settings: Settings,
+    article_channel: ArticleChannel | None = None,
+) -> list[QueuedMessage]:
     limit = max(1, settings.dzen_article_candidate_limit)
     newest_messages = db.translated_posts_for_article(limit=limit, newest_first=True)
-    return list(reversed(newest_messages))
+    messages = [ensure_message_topic(db, message) for message in reversed(newest_messages)]
+    if article_channel and len(configured_article_channels(settings)) > 1:
+        messages = filter_messages_for_channel(messages, article_channel.key)
+    return messages
 
 
 def should_auto_publish_dzen_article(settings: Settings, now: datetime | None = None) -> bool:
@@ -515,13 +605,20 @@ async def publish_generated_dzen_article(
     message_ids: list[int],
     dry_run: bool,
     slot_key: str | None,
+    article_channel: ArticleChannel | None = None,
 ) -> int:
-    publisher = build_publishers(settings, dry_run=dry_run).get("dzen")
+    channel = article_channel or article_channel_from_slot(settings, slot_key)
+    publisher = dzen_publisher_for_channel(settings, channel, dry_run=dry_run)
     if not publisher:
-        raise ValueError("DZEN_TELEGRAM_BRIDGE_CHAT_ID or Telegram bot token is not configured")
+        raise ValueError(f"Dzen bridge is not configured for {channel.key}")
     result = await publisher.publish_text(article)
     if dry_run:
-        print(json.dumps({"platform": "dzen", "ok": result.ok, "article": article}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"platform": "dzen", "channel": channel.key, "ok": result.ok, "article": article},
+                ensure_ascii=False,
+            )
+        )
         return 0
     article_id = db.record_article(
         text=article,
@@ -534,7 +631,12 @@ async def publish_generated_dzen_article(
     if not result.ok:
         await notify_admin(admin, "Dzen article publish failed", result.error or "unknown publish error")
         raise RuntimeError(f"Dzen publish failed: {result.error}")
-    logging.info("Dzen article published article_id=%s destination=%s", article_id, result.destination_id)
+    logging.info(
+        "Dzen article published article_id=%s channel=%s destination=%s",
+        article_id,
+        channel.key,
+        result.destination_id,
+    )
     return article_id
 
 
@@ -546,17 +648,20 @@ async def generate_dzen_article(
     dry_run: bool,
     force: bool = False,
     slot_key: str | None = None,
+    article_channel: ArticleChannel | None = None,
 ) -> None:
+    channel = article_channel or article_channel_from_slot(settings, slot_key)
     if slot_key and not dry_run and db.article_slot_status(slot_key) in {"published", "pending_review"}:
         logging.info("skip Dzen article: slot already handled %s status=%s", slot_key, db.article_slot_status(slot_key))
         return
-    messages = dzen_article_candidate_messages(db, settings)
+    messages = dzen_article_candidate_messages(db, settings, channel)
     if not messages:
-        logging.info("no translated posts available for Dzen article")
+        logging.info("no translated posts available for Dzen article channel=%s", channel.key)
         return
     if len(messages) < settings.dzen_article_min_posts and not force:
         logging.info(
-            "skip Dzen article: %s posts available, minimum is %s",
+            "skip Dzen article channel=%s: %s posts available, minimum is %s",
+            channel.key,
             len(messages),
             settings.dzen_article_min_posts,
         )
@@ -569,6 +674,8 @@ async def generate_dzen_article(
         posts,
         settings,
         article_date_label=date_label,
+        article_channel=channel,
+        slot_key=slot_key,
     )
     if issues and not dry_run:
         article_id = db.record_article(
@@ -581,14 +688,14 @@ async def generate_dzen_article(
         await notify_admin(
             admin,
             "Dzen article validation failed",
-            f"article_id={article_id}\nissues={'; '.join(issues)}",
+            f"article_id={article_id}\nchannel={channel.key}\nissues={'; '.join(issues)}",
         )
         raise ValueError(f"Dzen article validation failed article_id={article_id}: {'; '.join(issues)}")
     if issues:
         logging.warning("dry-run Dzen article validation issues: %s", "; ".join(issues))
 
     if dry_run:
-        print(json.dumps({"platform": "dzen", "ok": True, "article": article}, ensure_ascii=False))
+        print(json.dumps({"platform": "dzen", "channel": channel.key, "ok": True, "article": article}, ensure_ascii=False))
         return
 
     if settings.dzen_article_review_enabled and not should_auto_publish_dzen_article(settings):
@@ -609,7 +716,7 @@ async def generate_dzen_article(
             article_id=article_id,
             article_text=article,
             attempt=attempt,
-            slot_key=slot_key,
+            slot_key=f"{channel.name} / {slot_key or 'manual'}",
         )
         if not result.ok:
             db.update_article_status(article_id, "failed_review_notify", error=result.error)
@@ -627,12 +734,13 @@ async def generate_dzen_article(
         message_ids=message_ids,
         dry_run=dry_run,
         slot_key=slot_key,
+        article_channel=channel,
     )
     if settings.dzen_article_review_enabled and should_auto_publish_dzen_article(settings):
         await notify_admin(
             admin,
             "Dzen article auto-published",
-            f"article_id={article_id}\nslot={slot_key or 'manual'}\nsource_candidates={len(message_ids)}",
+            f"article_id={article_id}\nchannel={channel.key}\nslot={slot_key or 'manual'}\nsource_candidates={len(message_ids)}",
             level="info",
         )
 
@@ -798,12 +906,15 @@ async def handle_article_reject(
         "Улучши заголовок и первый экран, сохраняй каждый факт привязанным к источникам, "
         "не повторяй формулировки отклоненного текста и сделай русский стиль живее и прямее."
     )
+    channel = article_channel_from_slot(settings, article.slot_key)
     new_text, issues = await draft_dzen_article_with_validation(
         model,
         posts,
         settings,
         review_note=review_note,
         article_date_label=dzen_article_date_label(settings, slot_key=article.slot_key),
+        article_channel=channel,
+        slot_key=article.slot_key,
     )
     if issues:
         db.update_article_status(article.id, "failed_validation", error="; ".join(issues))
@@ -827,7 +938,7 @@ async def handle_article_reject(
         article_id=article.id,
         article_text=new_text,
         attempt=attempt,
-        slot_key=article.slot_key,
+        slot_key=f"{channel.name} / {article.slot_key or 'manual'}",
     )
     if result.ok and result.destination_id:
         db.update_article_review_message(article.id, admin.chat_id, result.destination_id)
@@ -836,10 +947,46 @@ async def handle_article_reject(
 
 
 def print_status(db: QueueDatabase, settings: Settings) -> None:
+    today = local_now(settings.app_timezone).date()
     data = {
         "db_path": str(settings.db_path),
         "source_fetch_mode": settings.source_fetch_mode,
         "publish_order": settings.publish_order,
+        "dzen_article_review_enabled": settings.dzen_article_review_enabled,
+        "dzen_article_footer": {
+            "enabled": settings.dzen_article_footer_enabled,
+            "policy": settings.dzen_article_footer_policy,
+            "rotate": settings.dzen_article_footer_rotate,
+            "links_configured": {
+                "telegram": bool(settings.dzen_article_footer_telegram_url),
+                "vk": bool(settings.dzen_article_footer_vk_url),
+                "max": bool(settings.dzen_article_footer_max_url),
+            },
+        },
+        "dzen_article_channels": [
+            {
+                "key": channel.key,
+                "name": channel.name,
+                "bridge_configured": bool(channel.bridge_chat_id),
+                "bot_configured": bool(channel.bot_token),
+                "bot_source": "channel"
+                if channel.key in settings.dzen_article_bot_tokens
+                else "default"
+                if channel.bot_token
+                else None,
+                "windows": list(channel.windows),
+            }
+            for channel in configured_article_channels(settings)
+        ],
+        "dzen_article_schedule_today": [
+            {
+                "channel": slot.channel.key,
+                "slot_key": slot.slot_key,
+                "window": slot.window,
+                "publish_time": slot.publish_time,
+            }
+            for slot in daily_article_schedule(settings, today)
+        ],
         "message_status": db.status_counts(),
         "publish_status": db.publish_status_counts(),
         "article_status": db.article_status_counts(),
@@ -856,6 +1003,7 @@ def print_messages(db: QueueDatabase, limit: int) -> None:
                 "source_channel_id": message.source_channel_id,
                 "source_message_id": message.source_message_id,
                 "status": message.status,
+                "topic": message.topic,
                 "attempts": message.attempts,
                 "last_error": message.last_error,
                 "source_text": message.source_text,
@@ -874,6 +1022,7 @@ def print_failed_translations(db: QueueDatabase, limit: int) -> None:
                 "source_channel_id": message.source_channel_id,
                 "source_message_id": message.source_message_id,
                 "status": message.status,
+                "topic": message.topic,
                 "attempts": message.attempts,
                 "last_error": message.last_error,
                 "source_text": message.source_text,
@@ -909,12 +1058,14 @@ def set_translation_from_cli(db: QueueDatabase, settings: Settings, row_id: int,
         )
         return
     db.set_manual_translation(row_id, prepared)
+    topic = save_recomputed_message_topic(db, message, prepared)
     print(
         json.dumps(
             {
                 "row": row_id,
                 "ok": True,
                 "status": "translated",
+                "topic": topic,
                 "translated_text": prepared,
             },
             ensure_ascii=False,
@@ -1038,11 +1189,15 @@ async def run_processing_pass(
     if not skip_publish:
         await publish_pending(db, settings, dry_run=dry_run, limit=limit, admin=admin)
 
-    scheduled_slot_key = due_article_slot(settings)
-    if scheduled_slot_key:
-        logging.info("Dzen article slot due: %s", scheduled_slot_key)
-    if article or scheduled_slot_key:
-        manual_slot_key = None if scheduled_slot_key else f"manual-{int(time.time())}" if not dry_run else None
+    scheduled_slots = due_article_slots(settings)
+    for scheduled_slot in scheduled_slots:
+        logging.info(
+            "Dzen article slot due: channel=%s slot=%s time=%s window=%s",
+            scheduled_slot.channel.key,
+            scheduled_slot.slot_key,
+            scheduled_slot.publish_time,
+            scheduled_slot.window,
+        )
         await generate_dzen_article(
             db,
             settings,
@@ -1050,7 +1205,22 @@ async def run_processing_pass(
             admin,
             dry_run=dry_run,
             force=force_article,
-            slot_key=scheduled_slot_key or manual_slot_key,
+            slot_key=scheduled_slot.slot_key,
+            article_channel=scheduled_slot.channel,
+        )
+
+    if article and not scheduled_slots:
+        manual_channel = default_article_channel(settings)
+        manual_slot_key = f"manual-{manual_channel.key}-{int(time.time())}" if not dry_run else None
+        await generate_dzen_article(
+            db,
+            settings,
+            model,
+            admin,
+            dry_run=dry_run,
+            force=force_article,
+            slot_key=manual_slot_key,
+            article_channel=manual_channel,
         )
 
 

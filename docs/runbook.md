@@ -121,13 +121,40 @@ For production after MTProto is configured:
 
     python -m n1_project.worker --loop --source-mode mtproto
 
-The loop uses `WORKER_POLL_SECONDS` and `WORKER_BATCH_LIMIT` from `.env`. Dzen articles are checked against `DZEN_DAILY_ARTICLE_TIMES` and only generated when `DZEN_DAILY_ARTICLES_ENABLED=true`. Current quality-first cadence is one article per day, for example `DZEN_DAILY_ARTICLE_TIMES=18:00`.
+The loop uses `WORKER_POLL_SECONDS` and `WORKER_BATCH_LIMIT` from `.env`. Dzen/channel articles are generated only when `DZEN_DAILY_ARTICLES_ENABLED=true`.
 
-For each article run, the worker takes the latest `DZEN_ARTICLE_CANDIDATE_LIMIT` translated posts that have not yet been considered for an article. The model must then select only the semantically related cluster from those candidates instead of forcing all posts into one article.
+Current multi-channel cadence is 9 articles per day: 3 for `russia`, 3 for `energy`, and 3 for `tech`.
 
-Scheduled Dzen articles are idempotent by slot. A successful article for `2026-07-03 18:00` will not be generated again after a restart.
+Each channel has three daily windows, and the worker chooses one stable random minute inside each window for that date:
 
-In `--loop`, Telegram admin callback buttons are handled by a separate long-poll task through `getUpdates`, so Dzen accept/reject buttons do not wait for the next `WORKER_POLL_SECONDS` processing pass. Keep one worker instance running per bot token to avoid competing update offsets. The long-poll timeout is controlled by:
+    DZEN_ARTICLE_CHANNELS=russia,energy,tech
+    DZEN_ENERGY_TELEGRAM_BOT_TOKEN=<energy_bot_token>
+    DZEN_TECH_TELEGRAM_BOT_TOKEN=<tech_bot_token>
+    DZEN_ARTICLE_WINDOWS=russia=09:00-10:00|14:00-15:00|18:30-19:30;energy=09:20-10:20|14:25-15:25|19:15-20:15;tech=09:40-10:40|14:50-15:50|20:00-21:00
+    DZEN_ARTICLE_RANDOMIZE_TIMES=true
+    DZEN_ARTICLE_SLOT_WINDOW_MINUTES=5
+    DZEN_ARTICLE_FOOTER_ENABLED=true
+    DZEN_ARTICLE_FOOTER_POLICY=evening
+    DZEN_ARTICLE_FOOTER_ROTATE=true
+    DZEN_ARTICLE_FOOTER_TELEGRAM_URL=<telegram_url>
+    DZEN_ARTICLE_FOOTER_VK_URL=<vk_url>
+    DZEN_ARTICLE_FOOTER_MAX_URL=<max_url>
+
+For each article run, the worker takes the latest `DZEN_ARTICLE_CANDIDATE_LIMIT` translated posts that have not yet been considered for an article, stores a persistent `topic` for any unclassified old rows, filters them by the channel topic, and sends the matching candidate pool to the article model. The model should usually use 3-6 related posts from that topic. After an article is published or stored for review, the linked candidate posts receive `article_id`, so they will not be used for another article later.
+
+Recommended production values for 9 articles/day:
+
+    DZEN_ARTICLE_MIN_POSTS=3
+    DZEN_ARTICLE_CANDIDATE_LIMIT=30
+    DZEN_ARTICLE_PARSE_MODE=HTML
+
+Scheduled articles are idempotent by channel slot. A successful article for `2026-07-10 energy:evening` will not be generated again after a restart.
+
+If a channel uses a separate Telegram bot, set its channel token. Russia falls back to the main `TELEGRAM_BOT_TOKEN`; Energy and Tech can use `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`.
+
+The cross-platform footer is controlled by `DZEN_ARTICLE_FOOTER_*`. With `DZEN_ARTICLE_FOOTER_POLICY=evening`, the footer is appended only to each channel's evening article, so the links appear once per three articles. Footer wording rotates by slot key when `DZEN_ARTICLE_FOOTER_ROTATE=true`.
+
+When article review is enabled, Telegram admin callback buttons are handled by a separate long-poll task through `getUpdates`, so Dzen accept/reject buttons do not wait for the next `WORKER_POLL_SECONDS` processing pass. Keep one worker instance running per bot token to avoid competing update offsets. The long-poll timeout is controlled by:
 
     ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=25
 
@@ -222,19 +249,23 @@ For a manual test below the threshold:
 
     python -m n1_project.worker --once --article --force-article --dry-run
 
-For a real review-only draft test, omit `--dry-run`. In one-shot article-only mode, the worker does not publish pending short posts before generating the Dzen draft:
+For a real direct-publish test, omit `--dry-run`. In one-shot article-only mode, the worker does not publish pending short posts before generating the Dzen article. Manual article generation uses the first configured article channel, normally `russia`:
 
     python -m n1_project.worker --once --article --force-article
 
-Before publishing a generated Dzen article, check the title, first paragraph, source-grounded facts, and tone against `docs/dzen-article-playbook.md`.
+Before leaving fully automatic publishing unattended, check the title, first paragraph, source-grounded facts, and tone against `docs/dzen-article-playbook.md`.
 
 Recommended structure: the first sentence is a truthful headline that gives people a reason to open the article. The next paragraph immediately explains what happened, why it matters, and why the reader should continue. Do not force a standalone `Сводка за ...` date line; use the date only when it fits naturally.
 
 ## Dzen Article Review
 
-When `DZEN_ARTICLE_REVIEW_ENABLED=true`, generated articles are not sent directly to Dzen. The worker sends the draft to `ADMIN_TELEGRAM_CHAT_ID` with buttons:
+Current default is direct publication:
 
-- `Принять и отправить в Dzen` publishes the stored draft to `DZEN_TELEGRAM_BRIDGE_CHAT_ID`.
+    DZEN_ARTICLE_REVIEW_ENABLED=false
+
+With that value, generated articles are sent immediately to the bridge chat for `russia`, `energy`, or `tech`. To temporarily return to the button workflow, set `DZEN_ARTICLE_REVIEW_ENABLED=true`. In review mode, generated articles are not sent directly to Dzen. The worker sends the draft to `ADMIN_TELEGRAM_CHAT_ID` with buttons:
+
+- `Принять и отправить в Dzen` publishes the stored draft to the bridge chat for its article channel, inferred from slot keys such as `2026-07-10 energy:evening`.
 - `Отклонить и сгенерировать заново` generates another draft from the same source posts and sends it back for review.
 
 The current admin target is a personal Telegram DM:
@@ -242,7 +273,7 @@ The current admin target is a personal Telegram DM:
     ADMIN_TELEGRAM_CHAT_ID=<your_personal_telegram_user_id>
     ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=25
 
-If there is no response within `DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS`, the draft is marked `rejected_timeout` and is not published. On Saturday and Sunday, when `DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true`, scheduled articles bypass review and publish directly to `DZEN_TELEGRAM_BRIDGE_CHAT_ID`.
+If there is no response within `DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS`, the draft is marked `rejected_timeout` and is not published. On Saturday and Sunday, when `DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true`, scheduled articles bypass review and publish directly to the configured bridge chat for `russia`, `energy`, or `tech`.
 
 The worker stores the Telegram update offset in SQLite, so callback processing survives restarts. If a generated draft fails validation or publishing, the worker sends an admin notification.
 
@@ -267,7 +298,7 @@ Set:
 
     ADMIN_TELEGRAM_CHAT_ID=<your_personal_telegram_user_id>
     ADMIN_NOTIFICATIONS_ENABLED=true
-    DZEN_ARTICLE_CANDIDATE_LIMIT=10
+    DZEN_ARTICLE_CANDIDATE_LIMIT=30
     DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS=3
     DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true
 

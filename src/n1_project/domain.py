@@ -21,6 +21,7 @@ class QueuedMessage:
     status: str
     attempts: int
     last_error: str | None
+    topic: str | None = None
 
 
 @dataclass(frozen=True)

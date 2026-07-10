@@ -1,13 +1,13 @@
 # N1 Publishing Worker
 
-Automation for reading English Telegram posts, translating them into Russian, publishing short posts to VK and Telegram, and generating Dzen bridge articles with Telegram admin review.
+Automation for reading English Telegram posts, translating them into Russian, publishing short posts to VK and Telegram, and generating Dzen bridge articles for channel-specific Telegram bridge chats.
 
 ## Current Status
 
 - Telegram source reading: MTProto via Telethon.
 - Short-post translation: OpenRouter by default through `TRANSLATION_PROVIDER=openrouter`.
 - Publishing: VK and Telegram are ready.
-- Dzen articles: daily article drafts go to Telegram admin review; accepted drafts publish through the Dzen Telegram bridge.
+- Dzen/channel articles: 3 daily article channels are supported (`russia`, `energy`, `tech`), each with 3 randomized daily windows; generated articles publish directly through the matching Telegram bridge chat unless `DZEN_ARTICLE_REVIEW_ENABLED=true`.
 - OpenRouter: production LLM path for both translation and Dzen article writing.
 - MAX: implementation exists, but production publishing waits for `MAX_CHAT_ID`.
 

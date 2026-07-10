@@ -19,8 +19,8 @@ Use the channel as raw material for digests. A good article should group items b
 
 Current article cadence:
 
-- one article per day while quality is being measured;
-- publish in the 06:00-22:00 Moscow window, preferably after enough daily market posts have accumulated;
+- nine channel articles per day in the current multi-channel setup: three for `russia`, three for `energy`, and three for `tech`;
+- publish inside configured morning, afternoon, and evening windows with a stable random minute per channel and slot;
 - skip or manually force below the threshold instead of stretching thin source material.
 
 ## Related

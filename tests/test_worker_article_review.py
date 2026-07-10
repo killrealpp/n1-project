@@ -3,13 +3,16 @@ from datetime import datetime
 import pytest
 
 from n1_project.admin import AdminNotifier
+from n1_project.article_channels import configured_article_channels
 from n1_project.config import Settings
 from n1_project.db import QueueDatabase
 from n1_project.domain import PublishResult, SourcePost
 from n1_project.llm import TextModel
 from n1_project.worker import (
     approve_article_from_cli,
+    dzen_article_candidate_messages,
     dzen_article_date_label,
+    dzen_publisher_for_channel,
     generate_dzen_article,
     process_timed_out_article_reviews,
     should_auto_publish_dzen_article,
@@ -75,6 +78,121 @@ class FakeDzenPublisher:
     async def publish_text(self, text: str) -> PublishResult:
         self.published_texts.append(text)
         return PublishResult("dzen", True, destination_id="dzen-message")
+
+
+def test_dzen_article_candidate_messages_backfills_topics(tmp_path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "DZEN_ARTICLE_CHANNELS": "russia,energy,tech",
+            "DZEN_ARTICLE_CANDIDATE_LIMIT": "10",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    oil_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Brent oil is higher"))
+    btc_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "2", "BTC ETF inflows rise"))
+    db.mark_translated(oil_id, "Brent grows")
+    db.mark_translated(btc_id, "BTC ETF inflows rise")
+    energy = next(channel for channel in configured_article_channels(settings) if channel.key == "energy")
+
+    messages = dzen_article_candidate_messages(db, settings, energy)
+
+    assert [message.id for message in messages] == [oil_id]
+    assert db.message_by_id(oil_id).topic == "energy"
+    assert db.message_by_id(btc_id).topic == "tech"
+
+
+@pytest.mark.asyncio
+async def test_dzen_publisher_for_channel_uses_channel_bot_token(tmp_path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "main-token",
+            "DZEN_ARTICLE_CHANNELS": "energy",
+            "DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID": "-100energy",
+            "DZEN_ENERGY_TELEGRAM_BOT_TOKEN": "energy-token",
+        },
+        project_root=tmp_path,
+    )
+    energy = configured_article_channels(settings)[0]
+
+    publisher = dzen_publisher_for_channel(settings, energy, dry_run=True)
+    result = await publisher.publish_text("Тест")
+
+    assert result.ok is True
+    assert result.payload["chat_id"] == "-100energy"
+    assert publisher.bot_token == "energy-token"
+
+
+@pytest.mark.asyncio
+async def test_generate_dzen_article_publishes_directly_when_review_disabled(tmp_path, monkeypatch) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_TARGET_MIN_CHARS": "50",
+            "DZEN_ARTICLE_TARGET_MAX_CHARS": "1000",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Oil is higher"))
+    db.mark_translated(row_id, "Нефть растет")
+    fake_publisher = FakeDzenPublisher()
+    monkeypatch.setattr("n1_project.worker.build_publishers", lambda settings, dry_run=False: {"dzen": fake_publisher})
+
+    await generate_dzen_article(
+        db,
+        settings,
+        ArticleModel(),
+        AdminNotifier("token", "123456789", dry_run=True),
+        dry_run=False,
+        force=True,
+        slot_key="2026-07-06 18:00",
+    )
+
+    article = db.article_for_slot("2026-07-06 18:00")
+    assert article is not None
+    assert article.status == "published"
+    assert article.review_message_id is None
+    assert len(fake_publisher.published_texts) == 1
+
+
+@pytest.mark.asyncio
+async def test_generate_dzen_article_appends_footer_for_evening_slot(tmp_path, monkeypatch) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_TARGET_MIN_CHARS": "50",
+            "DZEN_ARTICLE_TARGET_MAX_CHARS": "1200",
+            "DZEN_ARTICLE_FOOTER_TELEGRAM_URL": "https://t.me/bazar",
+            "DZEN_ARTICLE_FOOTER_VK_URL": "https://vk.com/bazar",
+            "DZEN_ARTICLE_FOOTER_MAX_URL": "https://max.ru/bazar",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Oil is higher"))
+    db.mark_translated(row_id, "Нефть растет")
+    fake_publisher = FakeDzenPublisher()
+    monkeypatch.setattr("n1_project.worker.build_publishers", lambda settings, dry_run=False: {"dzen": fake_publisher})
+
+    await generate_dzen_article(
+        db,
+        settings,
+        ArticleModel(),
+        AdminNotifier("token", "123456789", dry_run=True),
+        dry_run=False,
+        force=True,
+        slot_key="2026-07-06 russia:evening",
+    )
+
+    assert "https://t.me/bazar" in fake_publisher.published_texts[0]
+    assert "https://vk.com/bazar" in fake_publisher.published_texts[0]
+    assert "https://max.ru/bazar" in fake_publisher.published_texts[0]
 
 
 @pytest.mark.asyncio

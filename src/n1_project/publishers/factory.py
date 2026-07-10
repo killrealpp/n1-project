@@ -36,5 +36,6 @@ def build_publishers(settings: Settings, dry_run: bool = False) -> dict[str, Pub
             chat_id=settings.dzen_telegram_bridge_chat_id,
             max_chars=settings.dzen_post_max_text_chars,
             dry_run=dry_run,
+            parse_mode=settings.dzen_article_parse_mode or None,
         )
     return publishers

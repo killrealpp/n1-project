@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import httpx
 
+from n1_project.article_channels import configured_article_channels, daily_article_schedule
 from n1_project.config import Settings
+from n1_project.scheduler import local_now
 
 
 def mtproto_missing_settings(settings: Settings) -> list[str]:
@@ -35,6 +37,8 @@ def settings_health(settings: Settings) -> dict[str, object]:
     mtproto_missing = mtproto_missing_settings(settings)
     mtproto_session = mtproto_session_format(settings)
     ollama_required = settings.translation_provider == "ollama" or settings.article_llm_provider == "ollama"
+    article_channels = configured_article_channels(settings)
+    today = local_now(settings.app_timezone).date()
     return {
         "source_fetch_mode": settings.source_fetch_mode,
         "translation_max_attempts": settings.translation_max_attempts,
@@ -72,6 +76,50 @@ def settings_health(settings: Settings) -> dict[str, object]:
         "publish_order": settings.publish_order,
         "dzen_daily_articles_enabled": settings.dzen_daily_articles_enabled,
         "dzen_article_times": settings.dzen_daily_article_times,
+        "dzen_article_channels": [
+            {
+                "key": channel.key,
+                "name": channel.name,
+                "bridge_configured": bool(channel.bridge_chat_id),
+                "bot_configured": bool(channel.bot_token),
+                "bot_source": "channel"
+                if channel.key in settings.dzen_article_bot_tokens
+                else "default"
+                if channel.bot_token
+                else None,
+                "windows": list(channel.windows),
+            }
+            for channel in article_channels
+        ],
+        "dzen_article_bridge_channels_ready": sum(1 for channel in article_channels if channel.bridge_chat_id),
+        "dzen_article_publish_channels_ready": sum(
+            1 for channel in article_channels if channel.bridge_chat_id and channel.bot_token
+        ),
+        "dzen_article_channel_specific_bots_ready": sum(
+            1 for channel in article_channels if channel.key in settings.dzen_article_bot_tokens
+        ),
+        "dzen_article_randomize_times": settings.dzen_article_randomize_times,
+        "dzen_article_slot_window_minutes": settings.dzen_article_slot_window_minutes,
+        "dzen_article_parse_mode": settings.dzen_article_parse_mode,
+        "dzen_article_footer": {
+            "enabled": settings.dzen_article_footer_enabled,
+            "policy": settings.dzen_article_footer_policy,
+            "rotate": settings.dzen_article_footer_rotate,
+            "links_configured": {
+                "telegram": bool(settings.dzen_article_footer_telegram_url),
+                "vk": bool(settings.dzen_article_footer_vk_url),
+                "max": bool(settings.dzen_article_footer_max_url),
+            },
+        },
+        "dzen_article_schedule_today": [
+            {
+                "channel": slot.channel.key,
+                "slot_key": slot.slot_key,
+                "window": slot.window,
+                "publish_time": slot.publish_time,
+            }
+            for slot in daily_article_schedule(settings, today)
+        ],
         "dzen_article_min_posts": settings.dzen_article_min_posts,
         "dzen_article_candidate_limit": settings.dzen_article_candidate_limit,
         "dzen_article_review_timeout_hours": settings.dzen_article_review_timeout_hours,

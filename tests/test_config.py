@@ -25,8 +25,24 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS=11",
                 "DZEN_DAILY_ARTICLES_ENABLED=true",
                 "DZEN_DAILY_ARTICLE_TIMES=10:00,18:00",
-                "DZEN_ARTICLE_MIN_POSTS=9",
-                "DZEN_ARTICLE_CANDIDATE_LIMIT=10",
+                "DZEN_ARTICLE_CHANNELS=russia,energy,tech",
+                "DZEN_RUSSIA_TELEGRAM_BRIDGE_CHAT_ID=-100russia",
+                "DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID=-100energy",
+                "DZEN_ENERGY_TELEGRAM_BOT_TOKEN=energy-token",
+                "DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID=-100tech",
+                "DZEN_TECH_TELEGRAM_BOT_TOKEN=tech-token",
+                "DZEN_ARTICLE_WINDOWS=russia=09:00-10:00|14:00-15:00;energy=09:20-10:20;tech=09:40-10:40",
+                "DZEN_ARTICLE_RANDOMIZE_TIMES=true",
+                "DZEN_ARTICLE_SLOT_WINDOW_MINUTES=7",
+                "DZEN_ARTICLE_PARSE_MODE=HTML",
+                "DZEN_ARTICLE_FOOTER_ENABLED=true",
+                "DZEN_ARTICLE_FOOTER_POLICY=evening",
+                "DZEN_ARTICLE_FOOTER_ROTATE=true",
+                "DZEN_ARTICLE_FOOTER_TELEGRAM_URL=https://t.me/bazar",
+                "DZEN_ARTICLE_FOOTER_VK_URL=https://vk.com/bazar",
+                "DZEN_ARTICLE_FOOTER_MAX_URL=https://max.ru/bazar",
+                "DZEN_ARTICLE_MIN_POSTS=3",
+                "DZEN_ARTICLE_CANDIDATE_LIMIT=30",
                 "DZEN_ARTICLE_REVIEW_ENABLED=true",
                 "DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS=4",
                 "DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS=3",
@@ -53,8 +69,32 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
     assert settings.telegram_source_public_name == "num1_ch"
     assert settings.dzen_daily_articles_enabled is True
     assert settings.dzen_daily_article_times == ["10:00", "18:00"]
-    assert settings.dzen_article_min_posts == 9
-    assert settings.dzen_article_candidate_limit == 10
+    assert settings.dzen_article_channels == ["russia", "energy", "tech"]
+    assert settings.dzen_article_bridge_chat_ids == {
+        "russia": "-100russia",
+        "energy": "-100energy",
+        "tech": "-100tech",
+    }
+    assert settings.dzen_article_bot_tokens == {
+        "energy": "energy-token",
+        "tech": "tech-token",
+    }
+    assert settings.dzen_article_windows == {
+        "russia": ["09:00-10:00", "14:00-15:00"],
+        "energy": ["09:20-10:20"],
+        "tech": ["09:40-10:40"],
+    }
+    assert settings.dzen_article_randomize_times is True
+    assert settings.dzen_article_slot_window_minutes == 7
+    assert settings.dzen_article_parse_mode == "HTML"
+    assert settings.dzen_article_footer_enabled is True
+    assert settings.dzen_article_footer_policy == "evening"
+    assert settings.dzen_article_footer_rotate is True
+    assert settings.dzen_article_footer_telegram_url == "https://t.me/bazar"
+    assert settings.dzen_article_footer_vk_url == "https://vk.com/bazar"
+    assert settings.dzen_article_footer_max_url == "https://max.ru/bazar"
+    assert settings.dzen_article_min_posts == 3
+    assert settings.dzen_article_candidate_limit == 30
     assert settings.admin_telegram_chat_id == "-100admin"
     assert settings.admin_notifications_enabled is True
     assert settings.admin_callback_poll_timeout_seconds == 11
@@ -80,3 +120,4 @@ def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
     assert settings.openrouter_article_model == "openai/gpt-5.3-chat"
     assert settings.translation_max_attempts == 5
     assert settings.admin_callback_poll_timeout_seconds == 25
+    assert settings.dzen_article_review_enabled is False

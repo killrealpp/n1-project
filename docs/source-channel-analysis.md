@@ -40,13 +40,14 @@ The project supports `--fetch-public-preview` to read the public preview at `htt
 
 ## Dzen Article Instruction
 
-Dzen articles should be daily digests while quality is being measured, not expanded versions of one post.
+Dzen/channel articles should be themed digests, not expanded versions of one post.
 
 Current cadence:
 
-- one article per day, preferably after enough market posts have accumulated;
+- nine articles per day in the multi-channel setup: three for `russia`, three for `energy`, and three for `tech`;
+- each channel uses morning, afternoon, and evening windows with a stable random minute inside each window;
 - use the 06:00-22:00 Moscow window and avoid 22:00-06:00 for scheduled publishing;
-- if fewer than 8 posts are available, skip automatically unless the run uses `--force-article`.
+- if too few matching unused posts are available for a channel, skip automatically unless the run uses `--force-article`.
 
 Article structure:
 

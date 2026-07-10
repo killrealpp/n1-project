@@ -10,18 +10,32 @@ A Dzen article for this project should be a concise Russian editorial digest bui
 - Structure: title sentence, opening paragraph, 3-5 compact blocks, closing synthesis.
 - The first 1-2 paragraphs must clearly describe the subject because Dzen generates the card description from early text.
 - Direct Dzen articles can be much longer, but bridge articles stay under Telegram transport limits.
-- Current default cadence: one article per day while quality is being measured.
-- Preferred posting window: 06:00-22:00 Moscow time; avoid 22:00-06:00 unless manually forced. For one daily market digest, prefer the later part of the business day after enough source posts have accumulated.
+- Current default cadence: nine channel articles per day: three for `russia`, three for `energy`, and three for `tech`.
+- Preferred posting windows are configured per channel. The worker chooses a stable random minute inside each window for the current date.
 
 ## Writing Pattern
 
 The title should create honest curiosity from the real source facts. It should be strong enough to open through a real tension, consequence, unusual combination, exact figure, or sharp market question from the source posts. The opening should immediately tell the reader what happened, why it matters, and why the article is worth finishing. Do not force a standalone date line such as `Сводка за 6 июля 2026 года:`; the date can appear naturally only when useful. Each body block should explain one idea from the source posts. The conclusion should state what matters now and what investors will watch next.
 
-For `@num1_ch`, a useful article is normally a themed market digest from several posts, not an expanded version of one short signal. The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=10` by default, and the draft should usually use the best related subset from those candidates instead of mentioning every candidate.
+For `@num1_ch`, a useful article is normally a themed market digest from several posts, not an expanded version of one short signal. The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=30` by default in the multi-channel setup, stores persistent queue `topic` values, filters candidates by channel topic, and the draft should usually use the best related subset from those candidates instead of mentioning every candidate.
+
+The channel lanes are:
+
+- `russia`: Russian market, ruble, CBR, IPO, bonds, equities, banks, companies, dividends, jobs, mortgage, and economy-for-people signals.
+- `energy`: oil, gas, LNG, fuel, metals, commodities, Hormuz, Iran, sanctions, and geopolitical risks when they affect energy or prices.
+- `tech`: crypto, BTC, ETH, DeFi, stablecoins, AI, chips, semiconductors, tech companies, and global tech-market signals.
+
+After an article is published or stored for review, the linked candidate posts are marked with `article_id`, so they are not reused in later articles.
+
+Current production mode is direct bridge publishing with `DZEN_ARTICLE_REVIEW_ENABLED=false`. Set it to `true` only when the Telegram button review gate should be restored.
+
+Energy and Tech can publish through their own Telegram bots via `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`; Russia falls back to the main `TELEGRAM_BOT_TOKEN`.
+
+The cross-platform footer should appear only in evening articles by default. This gives each channel one link block per three articles and avoids a repetitive promotional tail in all nine daily posts. Footer wording rotates by slot key and should use direct URLs for Telegram, VK, and MAX.
 
 ## Daily Workflow
 
-1. Collect the latest 10 translated source posts that have not yet been considered for an article.
+1. Collect the latest translated source posts that have not yet been considered for an article.
 2. Treat those posts as candidates, not a mandatory checklist.
 3. Pick one main semantic cluster or two related themes. Good groupings are markets, macro, Russia, China, energy, crypto, companies, banks, currencies, and sanctions/regulation.
 4. Exclude weak or isolated posts if they would force an artificial connection.
@@ -29,7 +43,8 @@ For `@num1_ch`, a useful article is normally a themed market digest from several
 6. Draft the opening as the card description: what happened, who/what is affected, and why the reader should continue.
 7. Build 3-5 short blocks from source-grounded facts.
 8. Finish with a cautious synthesis: what changed today or what is worth watching next.
-9. Run the quality gate before publishing.
+9. Use short `<b>...</b>` HTML accents for section headings or key takeaways when they make the text easier to scan. Do not bold the first title sentence or whole long paragraphs.
+10. Run the quality gate before publishing.
 
 ## Title And Card Pattern
 

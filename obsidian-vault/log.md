@@ -1,5 +1,17 @@
 # Log
 
+## [2026-07-10] research | Posting-history themes for multi-account articles
+
+Reviewed the locally available posting history for topic planning. The local SQLite database contains 7 published short posts and 3 Dzen article drafts, while the public preview of the configured target Telegram channel returned 361 text posts with message ids 1-387. No secret values were printed. The strongest repeatable article buckets are Russian finance/business, commodities-energy-metals, crypto/AI/technology, plus notable secondary flows in geopolitics/sanctions/war risk and global macro/rates/FX. Recommendation: use three account lanes around Russian market/business, energy/commodities/geopolitical risk, and crypto/technology/global markets, while adding a production topic tag per message so future article routing is based on stored labels rather than ad hoc keyword review.
+
+## [2026-07-10] design | BAZAR channel avatar set
+
+Generated a three-avatar visual set for the proposed channel family: `assets/avatars/bazar-russia-avatar.png`, `assets/avatars/bazar-energy-avatar.png`, and `assets/avatars/bazar-tech-avatar.png`. The design direction uses one shared premium financial-media style with a large `B` monogram for small-avatar legibility, while differentiating channels through Russian-market, energy/commodities, and crypto/AI/technology visual cues.
+
+## [2026-07-10] implementation | Multi-channel article routing
+
+Added the three-channel article setup for `russia`, `energy`, and `tech`. Energy uses Telegram bridge/channel id `-1004359338573`; Tech uses `-1003780429216`; Russia keeps the existing bridge setting. The worker now supports three randomized daily windows per channel, stable per date and slot, topic-filtered unused article candidates, channel-specific publishing, and HTML `<b>...</b>` accents for subheadings and key points. Local `.env` now targets 9 articles/day with `DZEN_ARTICLE_MIN_POSTS=3` and `DZEN_ARTICLE_CANDIDATE_LIMIT=30`.
+
 ## [2026-07-03] ingest | User plans and rules
 
 Read user-provided `PLANS.md`, `obsidian.txt`, and `codex_rules.txt`. Captured the need for self-contained ExecPlans, an Obsidian-style compounding wiki, git initialization without commits/remotes, `AGENTS.md`, safe `.gitignore`, and later Ruflo/subagent usage for large tasks.
@@ -235,3 +247,15 @@ Applied the user's new Dzen article prompt. The runtime article prompt now asks 
 ## [2026-07-09] fix | Calendar date translation validation
 
 Investigated server row `7192`, where a calendar post date `2026.07.09` was validly translated as `09.07.2026` but failed number preservation with `missing numbers: 2026.07` and `added numbers: 09.07`. Number extraction now recognizes full dates in `YYYY.MM.DD` and `DD.MM.YYYY` forms, normalizes them to the same canonical date token, and masks the date before ordinary number extraction so partial date fragments are not compared as separate numbers. Added a regression test for the observed calendar post shape. Verified `python -m pytest -q` passes 82 tests and `python -m compileall -q src tests` succeeds.
+
+## [2026-07-10] implementation | Persistent article topics and direct Dzen publishing
+
+Added a `messages.topic` SQLite column and migration so `russia`, `energy`, and `tech` article routing is stored per post instead of being recomputed from keywords every time. New translated/manual rows now save a topic immediately; old translated rows without a topic are backfilled during article candidate selection. Switched current Dzen article behavior to direct bridge publishing with `DZEN_ARTICLE_REVIEW_ENABLED=false`; setting it back to `true` restores the Telegram admin accept/reject flow.
+
+## [2026-07-10] implementation | Channel-specific Dzen bot tokens
+
+Added optional per-channel Telegram bot tokens for Dzen article bridge publishing. `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN` are now reserved in `.env` so Energy and Tech can publish with bots that already have access to those channels. Russia continues to fall back to the main `TELEGRAM_BOT_TOKEN` unless a channel-specific token is configured.
+
+## [2026-07-10] implementation | Evening cross-platform article footer
+
+Added configurable cross-platform footers for Dzen/channel articles. `DZEN_ARTICLE_FOOTER_ENABLED=true`, `DZEN_ARTICLE_FOOTER_POLICY=evening`, and `DZEN_ARTICLE_FOOTER_ROTATE=true` make Telegram/VK/MAX links appear only in each channel's evening article, once per three articles, with rotating wording. The footer is appended before final Dzen validation so the 4096-character Telegram bridge limit and project article length limits include the link block.

@@ -6,7 +6,9 @@ Dzen bridge publishing uses the official Dzen Telegram sync bot instead of a dir
 
 The Dzen channel is connected to a public Telegram channel through the Dzen sync bot. After setup, posts from Telegram can be imported into Dzen automatically or manually.
 
-For this project, the automation sends generated article text to the bridge chat id stored as `DZEN_TELEGRAM_BRIDGE_CHAT_ID`.
+For this project, the automation sends generated article text directly to channel-specific bridge chat ids by default. `DZEN_TELEGRAM_BRIDGE_CHAT_ID` remains the legacy/default Russia bridge fallback, while `DZEN_RUSSIA_TELEGRAM_BRIDGE_CHAT_ID`, `DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID`, and `DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID` route the multi-channel article flow. Energy and Tech can use their own bots through `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`. `DZEN_ARTICLE_REVIEW_ENABLED=true` can temporarily restore the admin button review gate.
+
+The article footer is controlled by `DZEN_ARTICLE_FOOTER_*`. The default policy is `evening`, so Telegram/VK/MAX links are appended only to evening articles and rotate between several short variants.
 
 ## Important Rules
 

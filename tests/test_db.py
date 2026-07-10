@@ -55,6 +55,19 @@ def test_message_by_id_and_row_specific_publishing(tmp_path: Path) -> None:
     assert db.messages_for_publishing(message_id=999) == []
 
 
+def test_message_topic_is_persisted(tmp_path: Path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    message_id, _ = db.upsert_source_post(SourcePost("-100", "1", "Brent is higher"))
+
+    assert db.message_by_id(message_id).topic is None
+    db.set_message_topic(message_id, "energy")
+
+    message = db.message_by_id(message_id)
+    assert message is not None
+    assert message.topic == "energy"
+
+
 def test_reset_failed_states(tmp_path: Path) -> None:
     db = QueueDatabase(tmp_path / "queue.sqlite3")
     db.initialize()
@@ -184,3 +197,50 @@ def test_article_slot_migration_for_existing_db(tmp_path: Path) -> None:
 
     assert db.record_article("text", "published", slot_key="2026-07-03 19:00") == 1
     assert db.article_slot_status("2026-07-03 19:00") == "published"
+
+
+def test_message_topic_migration_for_existing_db(tmp_path: Path) -> None:
+    path = tmp_path / "queue.sqlite3"
+    conn = __import__("sqlite3").connect(path)
+    conn.execute(
+        """
+        CREATE TABLE messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_channel_id TEXT NOT NULL,
+          source_message_id TEXT NOT NULL,
+          source_date TEXT,
+          source_text TEXT NOT NULL,
+          translated_text TEXT,
+          status TEXT NOT NULL DEFAULT 'received',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          last_error TEXT,
+          article_id INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          published_at TEXT,
+          UNIQUE(source_channel_id, source_message_id)
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE articles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          text TEXT NOT NULL,
+          status TEXT NOT NULL,
+          destination_id TEXT,
+          error TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    db = QueueDatabase(path)
+    db.initialize()
+    message_id, _ = db.upsert_source_post(SourcePost("-100", "1", "BTC rises"))
+    db.set_message_topic(message_id, "tech")
+
+    assert db.message_by_id(message_id).topic == "tech"

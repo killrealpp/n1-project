@@ -20,8 +20,8 @@ The project publishes Dzen material by sending a Telegram message to the Dzen br
 - Keep bridge article text at 2500-3900 characters.
 - Keep the first sentence under 140 characters because Dzen uses it as the title.
 - Do not put links in the first sentence.
-- Do not depend on Telegram formatting; Dzen says Telegram formatting is not transferred.
-- Use blank lines, short paragraphs, and plain section labels.
+- Do not depend only on Telegram formatting; Dzen says Telegram formatting may not be transferred.
+- Use blank lines, short paragraphs, and clear section labels. Telegram channel articles may use short `<b>...</b>` HTML accents for readability.
 - Text-only Telegram posts are accepted by the bridge as Dzen articles or posts depending on bridge settings.
 - The source Telegram channel connected to Dzen must be public, and one Dzen channel can be linked to only one Telegram channel.
 - Dzen bridge can work automatically or manually. In automatic mode, Telegram edits can update Dzen, but Telegram deletions do not delete Dzen publications automatically.
@@ -104,13 +104,29 @@ For this project, the article should therefore optimize for a truthful card and 
 
 ## Source Channel Fit
 
-The source channel `@num1_ch` is a high-frequency English feed of short market, macro, crypto, energy, company, and Russia/China news signals. Dzen articles should therefore be market digests. They should group many short items into themes rather than inflate one post into a full article.
+The source channel `@num1_ch` is a high-frequency English feed of short market, macro, crypto, energy, company, and Russia/China news signals. Channel articles should therefore be themed digests. They should group related items from one channel lane rather than inflate one post into a full article.
 
-Current cadence for this project is one article per day while article quality is being measured. Use the broad 06:00-22:00 Moscow window and prefer the later part of the business day, after enough source posts have accumulated. If there are too few posts, skip the article unless a manual run uses `--force-article`.
+Current cadence for this project is nine articles per day: three for `russia`, three for `energy`, and three for `tech`.
 
-The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=10` by default. A good article should usually come from the best related subset inside that candidate pool, not from all ten posts.
+The channel lanes are:
 
-Each scheduled article uses a persistent slot key such as `2026-07-03 18:00`. Published slots are skipped on later worker passes to avoid duplicate Dzen bridge posts after restarts.
+- `russia`: Russian market, ruble, CBR, IPO, bonds, equities, banks, companies, dividends, jobs, mortgage, and economy-for-people signals.
+- `energy`: oil, gas, LNG, fuel, metals, commodities, Hormuz, Iran, sanctions, and geopolitical risks when they affect energy or prices.
+- `tech`: crypto, BTC, ETH, DeFi, stablecoins, AI, chips, semiconductors, tech companies, and global tech-market signals.
+
+Each lane has morning, afternoon, and evening windows. The worker chooses a stable random minute inside each window for the current date. If there are too few matching unused posts for a lane, skip that article instead of padding it.
+
+The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=30` by default in the multi-channel setup, stores a persistent `topic` on queue messages, then filters candidates by that channel topic. A good article should usually come from the best related subset inside that candidate pool, normally 3-6 posts, not from every candidate.
+
+Each scheduled article uses a persistent slot key such as `2026-07-10 energy:evening`. Published or pending slots are skipped on later worker passes to avoid duplicate bridge posts after restarts.
+
+Current production behavior is direct bridge publishing (`DZEN_ARTICLE_REVIEW_ENABLED=false`). Set it to `true` only when the button-based admin review gate should be restored.
+
+Energy and Tech can publish through their own Telegram bots via `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`; Russia falls back to the main `TELEGRAM_BOT_TOKEN` unless a Russia-specific token is configured.
+
+The cross-platform footer should appear only in evening articles by default. This gives each channel one link block per three articles, keeps morning/afternoon articles cleaner, and avoids a repetitive promotional tail in all nine daily posts. Footer variants should rotate and use direct URLs for Telegram, VK, and MAX.
+
+The article body may use short HTML bold accents through `<b>...</b>` for section headings or key takeaways. Do not bold the first title sentence, do not bold entire long paragraphs, and do not use Markdown.
 
 ## Style Rules
 

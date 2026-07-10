@@ -16,7 +16,16 @@ def test_settings_health_flags(tmp_path: Path) -> None:
             "ADMIN_TELEGRAM_CHAT_ID": "-300",
             "ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS": "17",
             "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-200",
+            "DZEN_ARTICLE_REVIEW_ENABLED": "true",
+            "DZEN_ARTICLE_CHANNELS": "russia,energy,tech",
+            "DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID": "-201",
+            "DZEN_ENERGY_TELEGRAM_BOT_TOKEN": "energy-token",
+            "DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID": "-202",
+            "DZEN_TECH_TELEGRAM_BOT_TOKEN": "tech-token",
             "DZEN_DAILY_ARTICLES_ENABLED": "true",
+            "DZEN_ARTICLE_FOOTER_TELEGRAM_URL": "https://t.me/bazar",
+            "DZEN_ARTICLE_FOOTER_VK_URL": "https://vk.com/bazar",
+            "DZEN_ARTICLE_FOOTER_MAX_URL": "https://max.ru/bazar",
         },
         project_root=tmp_path,
     )
@@ -42,6 +51,21 @@ def test_settings_health_flags(tmp_path: Path) -> None:
     assert health["dzen_bridge_ready"] is True
     assert health["dzen_article_review_ready"] is True
     assert health["dzen_daily_articles_enabled"] is True
+    assert health["dzen_article_bridge_channels_ready"] == 3
+    assert health["dzen_article_publish_channels_ready"] == 3
+    assert health["dzen_article_channel_specific_bots_ready"] == 2
+    assert [item["key"] for item in health["dzen_article_channels"]] == ["russia", "energy", "tech"]
+    assert [item["bot_configured"] for item in health["dzen_article_channels"]] == [True, True, True]
+    assert [item["bot_source"] for item in health["dzen_article_channels"]] == ["default", "channel", "channel"]
+    assert len(health["dzen_article_schedule_today"]) == 9
+    assert health["dzen_article_parse_mode"] == "HTML"
+    assert health["dzen_article_footer"]["enabled"] is True
+    assert health["dzen_article_footer"]["policy"] == "evening"
+    assert health["dzen_article_footer"]["links_configured"] == {
+        "telegram": True,
+        "vk": True,
+        "max": True,
+    }
     assert health["dzen_article_candidate_limit"] == 10
     assert health["dzen_article_review_timeout_hours"] == 3
     assert health["dzen_article_auto_publish_weekends"] is True

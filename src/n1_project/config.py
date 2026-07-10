@@ -45,6 +45,37 @@ def parse_csv(value: str | None) -> list[str]:
     return [item.strip().lower() for item in value.split(",") if item.strip()]
 
 
+def parse_key_value_csv(value: str | None) -> dict[str, str]:
+    if not value:
+        return {}
+    result: dict[str, str] = {}
+    for raw_item in value.split(","):
+        item = raw_item.strip()
+        if not item or "=" not in item:
+            continue
+        key, item_value = item.split("=", 1)
+        key = key.strip().lower()
+        item_value = item_value.strip()
+        if key and item_value:
+            result[key] = item_value
+    return result
+
+
+def parse_channel_windows(value: str | None) -> dict[str, list[str]]:
+    if not value:
+        return {}
+    result: dict[str, list[str]] = {}
+    for raw_item in value.split(";"):
+        item = raw_item.strip()
+        if not item or "=" not in item:
+            continue
+        key, windows_text = item.split("=", 1)
+        windows = [window.strip() for window in windows_text.split("|") if window.strip()]
+        if key.strip() and windows:
+            result[key.strip().lower()] = windows
+    return result
+
+
 def resolve_optional_path(value: str | None, root: Path) -> str:
     if value is None or value.strip() == "":
         return ""
@@ -87,6 +118,19 @@ class Settings:
     admin_callback_poll_timeout_seconds: int
 
     dzen_telegram_bridge_chat_id: str
+    dzen_article_channels: list[str]
+    dzen_article_bridge_chat_ids: dict[str, str]
+    dzen_article_bot_tokens: dict[str, str]
+    dzen_article_windows: dict[str, list[str]]
+    dzen_article_randomize_times: bool
+    dzen_article_slot_window_minutes: int
+    dzen_article_parse_mode: str
+    dzen_article_footer_enabled: bool
+    dzen_article_footer_policy: str
+    dzen_article_footer_rotate: bool
+    dzen_article_footer_telegram_url: str
+    dzen_article_footer_vk_url: str
+    dzen_article_footer_max_url: str
     dzen_daily_articles_enabled: bool
     dzen_daily_article_times: list[str]
     dzen_article_min_posts: int
@@ -125,6 +169,26 @@ class Settings:
         if not db_path.is_absolute():
             db_path = root / db_path
 
+        dzen_bridge_chat_id = env.get("DZEN_TELEGRAM_BRIDGE_CHAT_ID", "")
+        dzen_article_bridge_chat_ids = parse_key_value_csv(env.get("DZEN_ARTICLE_BRIDGE_CHAT_IDS"))
+        for key, env_key in (
+            ("russia", "DZEN_RUSSIA_TELEGRAM_BRIDGE_CHAT_ID"),
+            ("energy", "DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID"),
+            ("tech", "DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID"),
+        ):
+            if env.get(env_key):
+                dzen_article_bridge_chat_ids[key] = str(env[env_key])
+        if dzen_bridge_chat_id and "russia" not in dzen_article_bridge_chat_ids:
+            dzen_article_bridge_chat_ids["russia"] = dzen_bridge_chat_id
+        dzen_article_bot_tokens = parse_key_value_csv(env.get("DZEN_ARTICLE_BOT_TOKENS"))
+        for key, env_key in (
+            ("russia", "DZEN_RUSSIA_TELEGRAM_BOT_TOKEN"),
+            ("energy", "DZEN_ENERGY_TELEGRAM_BOT_TOKEN"),
+            ("tech", "DZEN_TECH_TELEGRAM_BOT_TOKEN"),
+        ):
+            if env.get(env_key):
+                dzen_article_bot_tokens[key] = str(env[env_key])
+
         return cls(
             project_root=root,
             app_env=env.get("APP_ENV", "development"),
@@ -151,12 +215,25 @@ class Settings:
             admin_telegram_chat_id=env.get("ADMIN_TELEGRAM_CHAT_ID", env.get("TELEGRAM_TARGET_CHAT_ID", "")),
             admin_notifications_enabled=parse_bool(env.get("ADMIN_NOTIFICATIONS_ENABLED"), True),
             admin_callback_poll_timeout_seconds=parse_int(env.get("ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS"), 25),
-            dzen_telegram_bridge_chat_id=env.get("DZEN_TELEGRAM_BRIDGE_CHAT_ID", ""),
+            dzen_telegram_bridge_chat_id=dzen_bridge_chat_id,
+            dzen_article_channels=parse_csv(env.get("DZEN_ARTICLE_CHANNELS", "russia")),
+            dzen_article_bridge_chat_ids=dzen_article_bridge_chat_ids,
+            dzen_article_bot_tokens=dzen_article_bot_tokens,
+            dzen_article_windows=parse_channel_windows(env.get("DZEN_ARTICLE_WINDOWS")),
+            dzen_article_randomize_times=parse_bool(env.get("DZEN_ARTICLE_RANDOMIZE_TIMES"), True),
+            dzen_article_slot_window_minutes=parse_int(env.get("DZEN_ARTICLE_SLOT_WINDOW_MINUTES"), 5),
+            dzen_article_parse_mode=env.get("DZEN_ARTICLE_PARSE_MODE", "HTML").strip(),
+            dzen_article_footer_enabled=parse_bool(env.get("DZEN_ARTICLE_FOOTER_ENABLED"), True),
+            dzen_article_footer_policy=env.get("DZEN_ARTICLE_FOOTER_POLICY", "evening").strip().lower(),
+            dzen_article_footer_rotate=parse_bool(env.get("DZEN_ARTICLE_FOOTER_ROTATE"), True),
+            dzen_article_footer_telegram_url=env.get("DZEN_ARTICLE_FOOTER_TELEGRAM_URL", "").strip(),
+            dzen_article_footer_vk_url=env.get("DZEN_ARTICLE_FOOTER_VK_URL", "").strip(),
+            dzen_article_footer_max_url=env.get("DZEN_ARTICLE_FOOTER_MAX_URL", "").strip(),
             dzen_daily_articles_enabled=parse_bool(env.get("DZEN_DAILY_ARTICLES_ENABLED")),
             dzen_daily_article_times=parse_csv(env.get("DZEN_DAILY_ARTICLE_TIMES")),
             dzen_article_min_posts=parse_int(env.get("DZEN_ARTICLE_MIN_POSTS"), 8),
             dzen_article_candidate_limit=parse_int(env.get("DZEN_ARTICLE_CANDIDATE_LIMIT"), 10),
-            dzen_article_review_enabled=parse_bool(env.get("DZEN_ARTICLE_REVIEW_ENABLED"), True),
+            dzen_article_review_enabled=parse_bool(env.get("DZEN_ARTICLE_REVIEW_ENABLED"), False),
             dzen_article_review_max_attempts=parse_int(env.get("DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS"), 5),
             dzen_article_review_timeout_hours=parse_int(env.get("DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS"), 3),
             dzen_article_auto_publish_weekends=parse_bool(env.get("DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS"), True),
