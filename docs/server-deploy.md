@@ -22,8 +22,8 @@ Expected:
 
 - tests pass;
 - compileall prints nothing;
-- `--doctor` shows Telegram MTProto, Telegram target, VK, Dzen bridge channels, direct article publishing, footer links, and OpenRouter settings ready;
-- `max_ready=false` is acceptable until `MAX_CHAT_ID` is filled;
+- `--doctor` shows Telegram MTProto, Telegram target, VK, MAX, Dzen bridge channels, direct article publishing, footer links, and OpenRouter settings ready;
+- `max_ready=false` is acceptable only if MAX publishing is intentionally disabled;
 - `.env` and `data/n1_project.sqlite3` are ignored by git.
 
 Before pushing, confirm there are no real secrets in commit-ready files:
@@ -147,7 +147,7 @@ Fill these values from the local working `.env`:
     VK_ID=<real_vk_id>
 
     MAX_ACCESS_TOKEN=<real_max_token>
-    MAX_CHAT_ID=
+    MAX_CHAT_ID=<real_max_chat_id>
     MAX_API_BASE_URL=https://platform-api2.max.ru
     # Optional if MAX TLS fails with CERTIFICATE_VERIFY_FAILED:
     # MAX_CA_BUNDLE=certs/russian_trusted_ca_bundle.pem
@@ -197,7 +197,7 @@ Fill these values from the local working `.env`:
     DZEN_ARTICLE_TARGET_MAX_CHARS=3900
     SOCIAL_POST_MAX_LINES=3
     SOCIAL_POST_TARGET_MAX_CHARS=700
-    PUBLISH_ORDER=vk,telegram
+    PUBLISH_ORDER=vk,max,telegram
     PUBLISH_MIN_SECONDS_BETWEEN_POSTS=180
 
 Protect the env file:
@@ -232,7 +232,7 @@ Expected:
 - `ollama.skipped=true` when both translation and articles use OpenRouter;
 - `article_llm_provider=openrouter`;
 - `openrouter_article_model=openai/gpt-5.3-chat`;
-- `max_ready=false` until `MAX_CHAT_ID` is filled.
+- `max_ready=true` when `MAX_ACCESS_TOKEN`, `MAX_CHAT_ID`, and `PUBLISH_ORDER=vk,max,telegram` are configured.
 
 ## 9. Safe Server Smoke Tests
 
