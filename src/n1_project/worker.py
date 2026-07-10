@@ -1032,6 +1032,40 @@ def print_failed_translations(db: QueueDatabase, limit: int) -> None:
     print(json.dumps(rows, ensure_ascii=False, indent=2, sort_keys=True))
 
 
+def print_articles(db: QueueDatabase, limit: int) -> None:
+    rows = []
+    for article in db.recent_articles(limit=limit):
+        text_preview = " ".join(article.text.split())
+        rows.append(
+            {
+                "id": article.id,
+                "slot_key": article.slot_key,
+                "status": article.status,
+                "destination_id": article.destination_id,
+                "error": article.error,
+                "review_attempts": article.review_attempts,
+                "created_at": article.created_at,
+                "updated_at": article.updated_at,
+                "text_preview": text_preview[:500],
+            }
+        )
+    print(json.dumps(rows, ensure_ascii=False, indent=2, sort_keys=True))
+
+
+def manual_article_channels(settings: Settings, channel_key: str | None) -> list[ArticleChannel]:
+    channels = configured_article_channels(settings)
+    if not channel_key:
+        return [default_article_channel(settings)]
+    normalized = channel_key.strip().lower()
+    if normalized == "all":
+        return channels
+    for channel in channels:
+        if channel.key == normalized:
+            return [channel]
+    available = ", ".join(channel.key for channel in channels)
+    raise ValueError(f"Unknown article channel: {channel_key}. Available: {available}, all")
+
+
 def set_translation_from_cli(db: QueueDatabase, settings: Settings, row_id: int, text: str, force: bool = False) -> None:
     prepared = prepare_social_post_text(
         text,
@@ -1175,6 +1209,7 @@ async def run_processing_pass(
     limit: int,
     article: bool,
     force_article: bool,
+    article_channel: str | None,
     skip_publish: bool,
     skip_translate: bool,
     process_callbacks: bool = True,
@@ -1210,18 +1245,18 @@ async def run_processing_pass(
         )
 
     if article and not scheduled_slots:
-        manual_channel = default_article_channel(settings)
-        manual_slot_key = f"manual-{manual_channel.key}-{int(time.time())}" if not dry_run else None
-        await generate_dzen_article(
-            db,
-            settings,
-            model,
-            admin,
-            dry_run=dry_run,
-            force=force_article,
-            slot_key=manual_slot_key,
-            article_channel=manual_channel,
-        )
+        for manual_channel in manual_article_channels(settings, article_channel):
+            manual_slot_key = f"manual-{manual_channel.key}-{int(time.time())}" if not dry_run else None
+            await generate_dzen_article(
+                db,
+                settings,
+                model,
+                admin,
+                dry_run=dry_run,
+                force=force_article,
+                slot_key=manual_slot_key,
+                article_channel=manual_channel,
+            )
 
 
 async def amain() -> None:
@@ -1254,11 +1289,13 @@ async def amain() -> None:
     parser.add_argument("--approve-article", type=int, help="Publish a pending Dzen article by id")
     parser.add_argument("--status", action="store_true", help="Print queue status and exit")
     parser.add_argument("--list-messages", action="store_true", help="Print recent queued messages and exit")
+    parser.add_argument("--list-articles", action="store_true", help="Print recent Dzen articles and exit")
     parser.add_argument("--list-failed-translations", action="store_true", help="Print failed translation rows and exit")
     parser.add_argument("--reset-failed", action="store_true", help="Move failed translation/publish rows back to retryable states")
     parser.add_argument("--doctor", action="store_true", help="Check env and provider readiness")
     parser.add_argument("--print-translation-prompt", action="store_true", help="Print the translation prompt without calling an LLM")
     parser.add_argument("--print-article-prompt", action="store_true", help="Print the Dzen article prompt without calling an LLM")
+    parser.add_argument("--article-channel", help="Manual article channel key for --article, or all")
     args = parser.parse_args()
 
     settings = Settings.load(Path(args.env))
@@ -1309,6 +1346,10 @@ async def amain() -> None:
 
     if args.list_messages:
         print_messages(db, limit=args.limit if args.limit is not None else 10)
+        return
+
+    if args.list_articles:
+        print_articles(db, limit=args.limit if args.limit is not None else 10)
         return
 
     if args.list_failed_translations:
@@ -1408,6 +1449,7 @@ async def amain() -> None:
                         limit=args.limit if args.limit is not None else settings.worker_batch_limit,
                         article=args.article,
                         force_article=args.force_article,
+                        article_channel=args.article_channel,
                         skip_publish=args.skip_publish,
                         skip_translate=args.ingest_only,
                         process_callbacks=False,
@@ -1433,6 +1475,7 @@ async def amain() -> None:
             limit=args.limit if args.limit is not None else settings.worker_batch_limit,
             article=args.article,
             force_article=args.force_article,
+            article_channel=args.article_channel,
             skip_publish=effective_skip_publish,
             skip_translate=args.ingest_only,
         )

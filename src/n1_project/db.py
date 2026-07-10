@@ -303,6 +303,21 @@ class QueueDatabase:
             ).fetchone()
         return self._article_from_row(row) if row else None
 
+    def recent_articles(self, limit: int = 10) -> list[ArticleRecord]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, slot_key, text, status, destination_id, error,
+                       review_attempts, review_chat_id, review_message_id,
+                       created_at, updated_at
+                FROM articles
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [self._article_from_row(row) for row in rows]
+
     def article_slot_exists(self, slot_key: str) -> bool:
         return self.article_slot_status(slot_key) is not None
 

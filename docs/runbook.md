@@ -253,6 +253,15 @@ For a real direct-publish test, omit `--dry-run`. In one-shot article-only mode,
 
     python -m n1_project.worker --once --article --force-article
 
+To inspect recent stored articles:
+
+    python -m n1_project.worker --list-articles --limit 10
+
+To manually generate one specific article channel, or all three channels:
+
+    python -m n1_project.worker --once --article --force-article --article-channel energy
+    python -m n1_project.worker --once --article --force-article --article-channel all
+
 Before leaving fully automatic publishing unattended, check the title, first paragraph, source-grounded facts, and tone against `docs/dzen-article-playbook.md`.
 
 Recommended structure: the first sentence is a truthful headline that gives people a reason to open the article. The next paragraph immediately explains what happened, why it matters, and why the reader should continue. Do not force a standalone `Сводка за ...` date line; use the date only when it fits naturally.

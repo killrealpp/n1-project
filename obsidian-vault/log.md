@@ -1,5 +1,9 @@
 # Log
 
+## [2026-07-10] ops | Article inspection and manual channel catch-up
+
+Added CLI support for checking recent stored Dzen articles with `--list-articles` and manually generating a specific article channel with `--article-channel russia|energy|tech|all`. This makes server recovery simpler when scheduled article windows are missed during deployment or publisher troubleshooting.
+
 ## [2026-07-10] fix | Ticker-only translation validation for KZOSpp
 
 Server retry after enabling `MAX_CA_BUNDLE` exposed a ticker-only validation failure for `KZOSpp`. Updated market-symbol detection so posts made only of tickers, emojis, and numbers can pass without forced Cyrillic when preferred-share symbols use one or two `p/P` suffix characters. Added regression coverage for the `KZOSpp` signal.

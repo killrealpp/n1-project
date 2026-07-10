@@ -109,6 +109,18 @@ def test_article_slot_is_idempotent(tmp_path: Path) -> None:
     assert db.article_status_counts() == {"published": 1}
 
 
+def test_recent_articles_returns_latest_first(tmp_path: Path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+
+    first_id = db.record_article("text 1", "published", slot_key="2026-07-10 russia:morning")
+    second_id = db.record_article("text 2", "published", slot_key="2026-07-10 energy:morning")
+
+    recent = db.recent_articles(limit=2)
+
+    assert [article.id for article in recent] == [second_id, first_id]
+
+
 def test_article_review_links_messages_and_state(tmp_path: Path) -> None:
     db = QueueDatabase(tmp_path / "queue.sqlite3")
     db.initialize()

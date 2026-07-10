@@ -14,6 +14,8 @@ from n1_project.worker import (
     dzen_article_date_label,
     dzen_publisher_for_channel,
     generate_dzen_article,
+    manual_article_channels,
+    print_articles,
     process_timed_out_article_reviews,
     should_auto_publish_dzen_article,
 )
@@ -101,6 +103,28 @@ def test_dzen_article_candidate_messages_backfills_topics(tmp_path) -> None:
     assert [message.id for message in messages] == [oil_id]
     assert db.message_by_id(oil_id).topic == "energy"
     assert db.message_by_id(btc_id).topic == "tech"
+
+
+def test_manual_article_channels_can_select_one_or_all(tmp_path) -> None:
+    settings = Settings.from_mapping(
+        {"DZEN_ARTICLE_CHANNELS": "russia,energy,tech"},
+        project_root=tmp_path,
+    )
+
+    assert [channel.key for channel in manual_article_channels(settings, "tech")] == ["tech"]
+    assert [channel.key for channel in manual_article_channels(settings, "all")] == ["russia", "energy", "tech"]
+
+
+def test_print_articles_outputs_recent_preview(tmp_path, capsys) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    db.record_article("Title.\n\nBody text.", "published", destination_id="77", slot_key="manual-tech-1")
+
+    print_articles(db, limit=1)
+
+    output = capsys.readouterr().out
+    assert '"slot_key": "manual-tech-1"' in output
+    assert '"text_preview": "Title. Body text."' in output
 
 
 @pytest.mark.asyncio
