@@ -1,5 +1,9 @@
 # Log
 
+## [2026-07-10] fix | Ticker-only translation validation for KZOSpp
+
+Server retry after enabling `MAX_CA_BUNDLE` exposed a ticker-only validation failure for `KZOSpp`. Updated market-symbol detection so posts made only of tickers, emojis, and numbers can pass without forced Cyrillic when preferred-share symbols use one or two `p/P` suffix characters. Added regression coverage for the `KZOSpp` signal.
+
 ## [2026-07-10] research | Posting-history themes for multi-account articles
 
 Reviewed the locally available posting history for topic planning. The local SQLite database contains 7 published short posts and 3 Dzen article drafts, while the public preview of the configured target Telegram channel returned 361 text posts with message ids 1-387. No secret values were printed. The strongest repeatable article buckets are Russian finance/business, commodities-energy-metals, crypto/AI/technology, plus notable secondary flows in geopolitics/sanctions/war risk and global macro/rates/FX. Recommendation: use three account lanes around Russian market/business, energy/commodities/geopolitical risk, and crypto/technology/global markets, while adding a production topic tag per message so future article routing is based on stored labels rather than ad hoc keyword review.
