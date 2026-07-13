@@ -275,3 +275,7 @@ Reduced the Dzen/channel article cadence from nine daily articles to three: one 
 ## [2026-07-13] ops | Root screen server runbook
 
 Rewrote `docs/server-deploy.md` for the actual VDS workflow: run as `root` from `~/n1-project`, update with `git pull --ff-only`, use the existing `.venv`, check with `compileall` and `--doctor`, and run the worker in a named `screen` session `n1-worker`. The guide now avoids `sudo` and `systemctl`, includes backup, env, queue inspection, restart, logs, and emergency commands.
+
+## [2026-07-13] fix | Automatic MAX CA bundle
+
+MAX publishing still failed on the server with `CERTIFICATE_VERIFY_FAILED` when `MAX_CA_BUNDLE` was not explicitly set. The settings loader now automatically uses the bundled `certs/russian_trusted_ca_bundle.pem` when it exists, while still allowing `MAX_CA_BUNDLE` to override the path. `--doctor` now reports the bundled path as configured by default, and tests cover the fallback.

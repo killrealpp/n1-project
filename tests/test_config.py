@@ -121,3 +121,13 @@ def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
     assert settings.translation_max_attempts == 5
     assert settings.admin_callback_poll_timeout_seconds == 25
     assert settings.dzen_article_review_enabled is False
+
+
+def test_bundled_max_ca_bundle_is_used_by_default(tmp_path: Path) -> None:
+    bundle = tmp_path / "certs" / "russian_trusted_ca_bundle.pem"
+    bundle.parent.mkdir()
+    bundle.write_text("certificate", encoding="utf-8")
+
+    settings = Settings.from_mapping({}, project_root=tmp_path)
+
+    assert settings.max_ca_bundle == str(bundle)

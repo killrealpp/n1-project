@@ -85,6 +85,18 @@ def resolve_optional_path(value: str | None, root: Path) -> str:
     return str(path)
 
 
+def default_existing_path(root: Path, relative_path: str) -> str:
+    path = root / relative_path
+    return str(path) if path.exists() else ""
+
+
+def resolve_max_ca_bundle(value: str | None, root: Path) -> str:
+    configured = resolve_optional_path(value, root)
+    if configured:
+        return configured
+    return default_existing_path(root, "certs/russian_trusted_ca_bundle.pem")
+
+
 @dataclass(frozen=True)
 class Settings:
     project_root: Path
@@ -211,7 +223,7 @@ class Settings:
             max_access_token=env.get("MAX_ACCESS_TOKEN", ""),
             max_chat_id=env.get("MAX_CHAT_ID", ""),
             max_api_base_url=env.get("MAX_API_BASE_URL", "https://platform-api2.max.ru").rstrip("/"),
-            max_ca_bundle=resolve_optional_path(env.get("MAX_CA_BUNDLE"), root),
+            max_ca_bundle=resolve_max_ca_bundle(env.get("MAX_CA_BUNDLE"), root),
             admin_telegram_chat_id=env.get("ADMIN_TELEGRAM_CHAT_ID", env.get("TELEGRAM_TARGET_CHAT_ID", "")),
             admin_notifications_enabled=parse_bool(env.get("ADMIN_NOTIFICATIONS_ENABLED"), True),
             admin_callback_poll_timeout_seconds=parse_int(env.get("ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS"), 25),

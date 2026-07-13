@@ -330,7 +330,9 @@ Check that the bundled certificate file exists:
     cd ~/n1-project
     ls -l certs/russian_trusted_ca_bundle.pem
 
-Then set this in `.env`:
+Current code uses this bundled file automatically when it exists. `--doctor` should show a non-empty `max_ca_bundle` and `max_ca_bundle_configured=true`.
+
+If you need to override it manually, set this in `.env`:
 
     MAX_CA_BUNDLE=certs/russian_trusted_ca_bundle.pem
 

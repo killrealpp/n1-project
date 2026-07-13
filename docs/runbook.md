@@ -237,7 +237,7 @@ Current production `PUBLISH_ORDER` should include MAX after `MAX_ACCESS_TOKEN` a
 
     PUBLISH_ORDER=vk,max,telegram
 
-If MAX publishing fails with `CERTIFICATE_VERIFY_FAILED`, copy or point to a Russian trusted CA bundle and add:
+If MAX publishing fails with `CERTIFICATE_VERIFY_FAILED`, the worker now auto-uses `certs/russian_trusted_ca_bundle.pem` when that file exists. `--doctor` should show `max_ca_bundle_configured=true`. To override the path manually, add:
 
     MAX_CA_BUNDLE=certs/russian_trusted_ca_bundle.pem
 

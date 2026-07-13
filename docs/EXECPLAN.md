@@ -68,6 +68,7 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-10) Added rotating Telegram/VK/MAX footer blocks for evening articles only, with env placeholders for the final public links.
 - [x] (2026-07-13) Reduced article cadence to one daily article per channel, shortened target length to 1600-2800 characters, switched footer policy to every daily article, and added validation/repair guards for noisy translation failures.
 - [x] (2026-07-13) Rewrote server deployment instructions for the actual root + `screen` workflow, without `sudo` or `systemctl`.
+- [x] (2026-07-13) Made MAX TLS use the bundled Russian trusted CA bundle automatically when `MAX_CA_BUNDLE` is not explicitly set.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -553,3 +554,5 @@ Revision note 2026-07-10 / Codex: updated after adding the configurable evening-
 Revision note 2026-07-13 / Codex: updated after reducing article cadence to one daily slot per channel, changing article windows and target length, requiring concrete non-template headlines, and adding translation validation repair for `24/7`/ticker-only edge cases.
 
 Revision note 2026-07-13 / Codex: updated after replacing the server deployment guide with root/screen-only operating instructions for the current VDS.
+
+Revision note 2026-07-13 / Codex: updated after making MAX CA bundle detection automatic to stop `CERTIFICATE_VERIFY_FAILED` publish retries on servers where `.env` lacks `MAX_CA_BUNDLE`.
