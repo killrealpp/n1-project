@@ -22,7 +22,7 @@ Short posts use a strict translation prompt:
 3. Do not add facts or rewrite the source as social copy.
 4. Return only the translated post text.
 
-Dzen articles use a separate editorial prompt. The model receives the latest candidate translated posts for one channel, selects only a coherent semantic cluster, and writes a source-grounded Russian article. The worker then appends the evening footer when configured, validates the full bridge text, and publishes directly to the channel bridge while `DZEN_ARTICLE_REVIEW_ENABLED=false`.
+Dzen articles use a separate editorial prompt. The model receives the latest candidate translated posts for one channel, selects only a coherent semantic cluster, and writes a source-grounded Russian article. The worker then appends the configured footer, validates the full bridge text, and publishes directly to the channel bridge while `DZEN_ARTICLE_REVIEW_ENABLED=false`.
 
 ## Required Env
 

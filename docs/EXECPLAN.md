@@ -66,6 +66,8 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-10) Added persistent queue `topic` storage for article routing and switched current Dzen article behavior to direct bridge publishing with `DZEN_ARTICLE_REVIEW_ENABLED=false`.
 - [x] (2026-07-10) Added channel-specific Dzen Telegram bot tokens so Energy and Tech can publish with bots that already have access to their bridge channels.
 - [x] (2026-07-10) Added rotating Telegram/VK/MAX footer blocks for evening articles only, with env placeholders for the final public links.
+- [x] (2026-07-13) Reduced article cadence to one daily article per channel, shortened target length to 1600-2800 characters, switched footer policy to every daily article, and added validation/repair guards for noisy translation failures.
+- [x] (2026-07-13) Rewrote server deployment instructions for the actual root + `screen` workflow, without `sudo` or `systemctl`.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -205,9 +207,9 @@ The user wants one automation system that reads new English posts from a source 
   Rationale: the shared bot can publish to Russia, but Energy and Tech may require bots that already have access to those channels.
   Date/Author: 2026-07-10 / Codex.
 
-- Decision: Add cross-platform links only to evening channel articles.
-  Rationale: one footer per three articles keeps links visible without making all nine daily articles feel repetitive or promotional.
-  Date/Author: 2026-07-10 / Codex.
+- Decision: Add cross-platform links to each daily channel article.
+  Rationale: the cadence is now one article per channel per day, so the footer no longer repeats three times inside the same channel day.
+  Date/Author: 2026-07-13 / Codex.
 
 ## Outcomes & Retrospective
 
@@ -293,7 +295,7 @@ Next, use the existing local session-generation command to log into Telegram onc
 
 The message pipeline exists. A new Telegram source post is inserted into SQLite with status `received`, translated with local Llama when Ollama is available, validated, then published in configured order. Each destination result is recorded.
 
-The Dzen article job exists and is checked inside `--loop`. It collects translated posts that have not been used in an article, filters them by channel topic, generates a 2500-3900 character article using the Dzen article prompt, appends an evening footer when configured, validates title, length, and allowed HTML, then publishes to the matching channel bridge.
+The Dzen article job exists and is checked inside `--loop`. It collects translated posts that have not been used in an article, filters them by channel topic, generates a 1600-2800 character article using the Dzen article prompt, appends the cross-platform footer when configured, validates title, length, and allowed HTML, then publishes to the matching channel bridge.
 
 Fifth, add tests for env loading, length guards, id conversion for VK, link/number preservation checks, and deduplication. Add a dry-run mode that produces payloads without sending network requests.
 
@@ -547,3 +549,7 @@ Revision note 2026-07-10 / Codex: updated after adding persistent article topics
 Revision note 2026-07-10 / Codex: updated after adding per-channel Dzen Telegram bot tokens for Energy and Tech bridge publishing.
 
 Revision note 2026-07-10 / Codex: updated after adding the configurable evening-only cross-platform footer for Telegram, VK, and MAX links.
+
+Revision note 2026-07-13 / Codex: updated after reducing article cadence to one daily slot per channel, changing article windows and target length, requiring concrete non-template headlines, and adding translation validation repair for `24/7`/ticker-only edge cases.
+
+Revision note 2026-07-13 / Codex: updated after replacing the server deployment guide with root/screen-only operating instructions for the current VDS.

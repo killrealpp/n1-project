@@ -121,38 +121,40 @@ For production after MTProto is configured:
 
     python -m n1_project.worker --loop --source-mode mtproto
 
+On the current server, production is started through `screen` as `root`, not through `systemctl`. Use `docs/server-deploy.md` for the exact no-`sudo` restart/update sequence.
+
 The loop uses `WORKER_POLL_SECONDS` and `WORKER_BATCH_LIMIT` from `.env`. Dzen/channel articles are generated only when `DZEN_DAILY_ARTICLES_ENABLED=true`.
 
-Current multi-channel cadence is 9 articles per day: 3 for `russia`, 3 for `energy`, and 3 for `tech`.
+Current multi-channel cadence is 3 articles per day: 1 for `russia`, 1 for `energy`, and 1 for `tech`.
 
-Each channel has three daily windows, and the worker chooses one stable random minute inside each window for that date:
+Each channel has one daily window, and the worker chooses one stable random minute inside that window for the date:
 
     DZEN_ARTICLE_CHANNELS=russia,energy,tech
     DZEN_ENERGY_TELEGRAM_BOT_TOKEN=<energy_bot_token>
     DZEN_TECH_TELEGRAM_BOT_TOKEN=<tech_bot_token>
-    DZEN_ARTICLE_WINDOWS=russia=09:00-10:00|14:00-15:00|18:30-19:30;energy=09:20-10:20|14:25-15:25|19:15-20:15;tech=09:40-10:40|14:50-15:50|20:00-21:00
+    DZEN_ARTICLE_WINDOWS=russia=10:30-12:00;energy=14:30-16:00;tech=18:30-20:00
     DZEN_ARTICLE_RANDOMIZE_TIMES=true
     DZEN_ARTICLE_SLOT_WINDOW_MINUTES=5
     DZEN_ARTICLE_FOOTER_ENABLED=true
-    DZEN_ARTICLE_FOOTER_POLICY=evening
+    DZEN_ARTICLE_FOOTER_POLICY=always
     DZEN_ARTICLE_FOOTER_ROTATE=true
     DZEN_ARTICLE_FOOTER_TELEGRAM_URL=<telegram_url>
     DZEN_ARTICLE_FOOTER_VK_URL=<vk_url>
     DZEN_ARTICLE_FOOTER_MAX_URL=<max_url>
 
-For each article run, the worker takes the latest `DZEN_ARTICLE_CANDIDATE_LIMIT` translated posts that have not yet been considered for an article, stores a persistent `topic` for any unclassified old rows, filters them by the channel topic, and sends the matching candidate pool to the article model. The model should usually use 3-6 related posts from that topic. After an article is published or stored for review, the linked candidate posts receive `article_id`, so they will not be used for another article later.
+For each article run, the worker takes the latest `DZEN_ARTICLE_CANDIDATE_LIMIT` translated posts that have not yet been considered for an article, stores a persistent `topic` for any unclassified old rows, filters them by the channel topic, and sends the matching candidate pool to the article model. The model should usually use 4-8 related posts from that topic. After an article is published or stored for review, the linked candidate posts receive `article_id`, so they will not be used for another article later.
 
-Recommended production values for 9 articles/day:
+Recommended production values for 3 articles/day:
 
-    DZEN_ARTICLE_MIN_POSTS=3
+    DZEN_ARTICLE_MIN_POSTS=4
     DZEN_ARTICLE_CANDIDATE_LIMIT=30
     DZEN_ARTICLE_PARSE_MODE=HTML
 
-Scheduled articles are idempotent by channel slot. A successful article for `2026-07-10 energy:evening` will not be generated again after a restart.
+Scheduled articles are idempotent by channel slot. A successful article for `2026-07-10 energy:daily` will not be generated again after a restart.
 
 If a channel uses a separate Telegram bot, set its channel token. Russia falls back to the main `TELEGRAM_BOT_TOKEN`; Energy and Tech can use `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`.
 
-The cross-platform footer is controlled by `DZEN_ARTICLE_FOOTER_*`. With `DZEN_ARTICLE_FOOTER_POLICY=evening`, the footer is appended only to each channel's evening article, so the links appear once per three articles. Footer wording rotates by slot key when `DZEN_ARTICLE_FOOTER_ROTATE=true`.
+The cross-platform footer is controlled by `DZEN_ARTICLE_FOOTER_*`. With `DZEN_ARTICLE_FOOTER_POLICY=always`, the footer is appended to each daily channel article. Footer wording rotates by slot key when `DZEN_ARTICLE_FOOTER_ROTATE=true`.
 
 When article review is enabled, Telegram admin callback buttons are handled by a separate long-poll task through `getUpdates`, so Dzen accept/reject buttons do not wait for the next `WORKER_POLL_SECONDS` processing pass. Keep one worker instance running per bot token to avoid competing update offsets. The long-poll timeout is controlled by:
 
@@ -274,7 +276,7 @@ Current default is direct publication:
 
 With that value, generated articles are sent immediately to the bridge chat for `russia`, `energy`, or `tech`. To temporarily return to the button workflow, set `DZEN_ARTICLE_REVIEW_ENABLED=true`. In review mode, generated articles are not sent directly to Dzen. The worker sends the draft to `ADMIN_TELEGRAM_CHAT_ID` with buttons:
 
-- `Принять и отправить в Dzen` publishes the stored draft to the bridge chat for its article channel, inferred from slot keys such as `2026-07-10 energy:evening`.
+- `Принять и отправить в Dzen` publishes the stored draft to the bridge chat for its article channel, inferred from slot keys such as `2026-07-10 energy:daily`.
 - `Отклонить и сгенерировать заново` generates another draft from the same source posts and sends it back for review.
 
 The current admin target is a personal Telegram DM:

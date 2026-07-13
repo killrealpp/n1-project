@@ -35,7 +35,7 @@ Checked on 2026-07-03.
 
 - Current plan: no direct Dzen API secrets; publish through the Telegram bridge with the official Dzen sync bot.
 - Short Dzen post guard: 4096 characters.
-- Direct Dzen articles can be much longer, but this project uses a Telegram bridge; the practical article-message target is 2500-3900 characters so it stays below Telegram's 4096-character `sendMessage` limit.
+- Direct Dzen articles can be much longer, but this project uses a Telegram bridge; the practical article-message target is 1600-2800 characters so it stays below Telegram's 4096-character `sendMessage` limit with the footer.
 - In Telegram bridge mode, the first sentence becomes the Dzen article title; keep it under 140 characters and do not put links in it.
 - Formatting from Telegram is not transferred into the Dzen article, so the generator should use plain text structure, short paragraphs, and clear section lines instead of relying on Markdown styling.
 - Because Dzen will ingest from Telegram, the bridge chat/channel must also respect Telegram limits.

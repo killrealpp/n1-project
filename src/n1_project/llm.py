@@ -47,6 +47,22 @@ def translation_user_prompt(source_text: str) -> str:
     )
 
 
+def translation_repair_user_prompt(source_text: str, translated_text: str, issues: list[str]) -> str:
+    return (
+        "Repair this Russian translation of an English Telegram post.\n\n"
+        "Rules:\n"
+        "- Return only the corrected Russian translation.\n"
+        "- Keep the same line breaks and paragraph breaks as the source post.\n"
+        "- Preserve every number, date, ticker, hashtag, emoji, link, and source attribution exactly as present in the source.\n"
+        "- Remove any number, source, attribution, hashtag, emoji, link, context, or explanation that is not in the source.\n"
+        "- If the source contains no English words that need translation, return the source text unchanged.\n"
+        "- Never return `None`, `null`, an empty response, or a placeholder.\n\n"
+        f"Validation issues to fix:\n{'; '.join(issues)}\n\n"
+        f"Source post:\n{source_text}\n\n"
+        f"Bad translation:\n{translated_text}"
+    )
+
+
 def article_user_prompt(
     posts: list[str],
     min_chars: int,
@@ -75,7 +91,7 @@ def article_user_prompt(
         f"- Контекст даты статьи: {date_context}. Упоминай дату только если это помогает тексту, не делай сухую отдельную строку `Сводка за ...`.\n"
         "- Считай исходные посты пулом кандидатов, а не обязательным чек-листом.\n"
         "- Выбери только посты, которые складываются в понятную тему; слабые и одиночные сигналы можно пропустить.\n"
-        "- Обычно сильная статья использует 3-6 связанных постов. Если материала мало, сделай статью короче и честнее.\n\n"
+        "- Обычно сильная статья использует 4-8 связанных постов. Если материала мало, сделай статью короче и честнее.\n\n"
         "Роль и стиль:\n"
         "- Ты - опытный финансовый журналист и редактор Дзена.\n"
         "- Пиши так, будто объясняешь сложную тему другу, который интересуется экономикой, но не является профессионалом.\n"
@@ -88,10 +104,10 @@ def article_user_prompt(
         "- Не повторяй подряд `при этом`, `одновременно`, `кроме того`, `в свою очередь`, `таким образом`.\n"
         "- Сложные термины вроде EIA, SPR, Brent, FOMC сразу объясняй простыми словами, если они есть в источниках.\n\n"
         "Заголовок:\n"
-        "- Не пересказывай новость. Создай честную интригу из реального факта.\n"
-        "- Используй один из таких ходов, если он подходит к источникам: `Почему рынок испугался...`, `Что произошло...`, "
-        "`Что теперь будет...`, `Почему это важно...`, `Что означает...`, `Что изменилось...`, "
-        "`Рынок получил неожиданный сигнал...`, `Инвесторы не ожидали...`.\n"
+        "- Не пересказывай новость. Создай честную интригу из конкретного факта.\n"
+        "- Заголовок должен называть конкретного героя: компанию, страну, актив, рынок или событие из исходных постов.\n"
+        "- Не начинай заголовок с `Почему`, `Что произошло`, `Что теперь будет` или `Что означает`.\n"
+        "- Крючок должен рождаться из конкретного напряжения, цифры или последствия, а не из одинаковой вопросительной формулы.\n"
         "- Заголовок должен вызывать желание открыть статью, но не должен быть кликбейтом.\n"
         "- Тело статьи обязано прямо ответить на вопрос или напряжение из заголовка.\n\n"
         "Первый абзац:\n"
@@ -146,6 +162,9 @@ class TextModel(ABC):
     ) -> str:
         raise NotImplementedError
 
+    async def repair_translation(self, source_text: str, translated_text: str, issues: list[str]) -> str:
+        return await self.translate_post(source_text)
+
 
 class OllamaTextModel(TextModel):
     """Legacy local fallback. Production uses OpenRouter unless env opts back into Ollama."""
@@ -159,6 +178,14 @@ class OllamaTextModel(TextModel):
             model=self.settings.ollama_translation_model,
             system_prompt=TRANSLATION_SYSTEM_PROMPT,
             user_prompt=translation_user_prompt(source_text),
+            temperature=0.0,
+        )
+
+    async def repair_translation(self, source_text: str, translated_text: str, issues: list[str]) -> str:
+        return await self._chat(
+            model=self.settings.ollama_translation_model,
+            system_prompt=TRANSLATION_SYSTEM_PROMPT,
+            user_prompt=translation_repair_user_prompt(source_text, translated_text, issues),
             temperature=0.0,
         )
 
@@ -213,6 +240,11 @@ class OpenRouterArticleModel(TextModel):
         if not self.fallback:
             raise RuntimeError("OpenRouterArticleModel only handles articles without a fallback model")
         return await self.fallback.translate_post(source_text)
+
+    async def repair_translation(self, source_text: str, translated_text: str, issues: list[str]) -> str:
+        if not self.fallback:
+            raise RuntimeError("OpenRouterArticleModel only handles translation repair without a fallback model")
+        return await self.fallback.repair_translation(source_text, translated_text, issues)
 
     async def write_dzen_article(
         self,
@@ -278,6 +310,33 @@ class OpenRouterTranslationModel(TextModel):
             "messages": [
                 {"role": "system", "content": TRANSLATION_SYSTEM_PROMPT},
                 {"role": "user", "content": translation_user_prompt(source_text)},
+            ],
+            "temperature": 0.0,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.settings.openrouter_api_key}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(OPENROUTER_CHAT_COMPLETIONS_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+        try:
+            return str(data["choices"][0]["message"]["content"]).strip()
+        except (KeyError, IndexError) as exc:
+            raise RuntimeError(f"Unexpected OpenRouter response keys: {sorted(data.keys())}") from exc
+
+    async def repair_translation(self, source_text: str, translated_text: str, issues: list[str]) -> str:
+        if not self.settings.openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is empty")
+        if not self.settings.openrouter_translation_model:
+            raise RuntimeError("OPENROUTER_TRANSLATION_MODEL is empty")
+
+        payload = {
+            "model": self.settings.openrouter_translation_model,
+            "messages": [
+                {"role": "system", "content": TRANSLATION_SYSTEM_PROMPT},
+                {"role": "user", "content": translation_repair_user_prompt(source_text, translated_text, issues)},
             ],
             "temperature": 0.0,
         }

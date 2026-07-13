@@ -17,7 +17,7 @@ Checked on 2026-07-06.
 
 The project publishes Dzen material by sending a Telegram message to the Dzen bridge chat. That makes Telegram the transport limit even though direct Dzen Studio articles can be longer.
 
-- Keep bridge article text at 2500-3900 characters.
+- Keep bridge article text around 1600-2800 characters.
 - Keep the first sentence under 140 characters because Dzen uses it as the title.
 - Do not put links in the first sentence.
 - Do not depend only on Telegram formatting; Dzen says Telegram formatting may not be transferred.
@@ -51,13 +51,13 @@ End with a short synthesis: what matters now, what investors will watch next, an
 
 ## Daily Editorial Workflow
 
-1. Collect the latest 10 translated posts that have not yet been considered for an article.
+1. Collect the latest translated posts that have not yet been considered for an article.
 2. Treat those posts as candidates, not a mandatory checklist.
 3. Pick one main semantic cluster or two closely related clusters. Good groupings are markets, macro, Russia, China, energy, crypto, companies, banks, currencies, and regulation.
 4. Exclude weak or isolated posts if they would force an artificial connection.
 5. Choose the title after the theme is clear. The title must sell the real article, not a more dramatic version of it.
 6. Draft the opening as the card description: what happened, who or what is affected, and why the reader should continue.
-7. Build 3-5 short blocks from source-grounded facts.
+7. Build 2-4 short blocks from source-grounded facts.
 8. Finish with a cautious synthesis: what changed today or what is worth watching next.
 9. Run the quality gate before publishing.
 
@@ -67,18 +67,12 @@ The title and first paragraph are the traffic gate. Make them concrete before ma
 
 Useful title shapes for this project:
 
-- `Почему рынок испугался...`;
-- `Что произошло...`;
-- `Что теперь будет...`;
-- `Почему это важно...`;
-- `Что означает...`;
-- `Что изменилось...`;
-- `Рынок получил неожиданный сигнал...`;
-- `Инвесторы не ожидали...`;
-- fact + consequence;
+- concrete actor + consequence;
 - concrete market items + one unifying theme;
-- event/fact + restrained question about what changed or what to watch;
+- event/fact + restrained consequence about what changed or what to watch;
 - exact number, company, country, source, or ticker when the source supports it.
+
+Do not start titles with `Почему`, `Что произошло`, `Что теперь будет`, or `Что означает`. The headline should name a company, country, asset, market, or event from the source posts, not hide the subject behind a repeated question template.
 
 Adapted Dzen headline lessons:
 
@@ -106,7 +100,7 @@ For this project, the article should therefore optimize for a truthful card and 
 
 The source channel `@num1_ch` is a high-frequency English feed of short market, macro, crypto, energy, company, and Russia/China news signals. Channel articles should therefore be themed digests. They should group related items from one channel lane rather than inflate one post into a full article.
 
-Current cadence for this project is nine articles per day: three for `russia`, three for `energy`, and three for `tech`.
+Current cadence for this project is three articles per day: one for `russia`, one for `energy`, and one for `tech`.
 
 The channel lanes are:
 
@@ -114,17 +108,17 @@ The channel lanes are:
 - `energy`: oil, gas, LNG, fuel, metals, commodities, Hormuz, Iran, sanctions, and geopolitical risks when they affect energy or prices.
 - `tech`: crypto, BTC, ETH, DeFi, stablecoins, AI, chips, semiconductors, tech companies, and global tech-market signals.
 
-Each lane has morning, afternoon, and evening windows. The worker chooses a stable random minute inside each window for the current date. If there are too few matching unused posts for a lane, skip that article instead of padding it.
+Each lane has one daily window. The worker chooses a stable random minute inside that window for the current date. If there are too few matching unused posts for a lane, skip that article instead of padding it.
 
-The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=30` by default in the multi-channel setup, stores a persistent `topic` on queue messages, then filters candidates by that channel topic. A good article should usually come from the best related subset inside that candidate pool, normally 3-6 posts, not from every candidate.
+The automation uses `DZEN_ARTICLE_CANDIDATE_LIMIT=30` by default in the multi-channel setup, stores a persistent `topic` on queue messages, then filters candidates by that channel topic. A good article should usually come from the best related subset inside that candidate pool, normally 4-8 posts, not from every candidate.
 
-Each scheduled article uses a persistent slot key such as `2026-07-10 energy:evening`. Published or pending slots are skipped on later worker passes to avoid duplicate bridge posts after restarts.
+Each scheduled article uses a persistent slot key such as `2026-07-10 energy:daily`. Published or pending slots are skipped on later worker passes to avoid duplicate bridge posts after restarts.
 
 Current production behavior is direct bridge publishing (`DZEN_ARTICLE_REVIEW_ENABLED=false`). Set it to `true` only when the button-based admin review gate should be restored.
 
 Energy and Tech can publish through their own Telegram bots via `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`; Russia falls back to the main `TELEGRAM_BOT_TOKEN` unless a Russia-specific token is configured.
 
-The cross-platform footer should appear only in evening articles by default. This gives each channel one link block per three articles, keeps morning/afternoon articles cleaner, and avoids a repetitive promotional tail in all nine daily posts. Footer variants should rotate and use direct URLs for Telegram, VK, and MAX.
+The cross-platform footer should appear in each daily channel article by default. Since each channel now publishes one article per day, this keeps links present without repeating them three times per channel. Footer variants should rotate and use direct URLs for Telegram, VK, and MAX.
 
 The article body may use short HTML bold accents through `<b>...</b>` for section headings or key takeaways. Do not bold the first title sentence, do not bold entire long paragraphs, and do not use Markdown.
 

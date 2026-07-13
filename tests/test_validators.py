@@ -257,6 +257,28 @@ def test_translation_issues_allow_layer_one_as_first_level_translation() -> None
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_around_clock_wording_for_24_7() -> None:
+    source = "\U0001f1f7\U0001f1fa Moscow Exchange will move to 24/7 trading - TASS"
+    output = "\U0001f1f7\U0001f1fa Московская биржа перейдет к круглосуточному формату торгов - TASS"
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_stablecoin_fx_symbol_only_output_without_cyrillic() -> None:
+    source = "\U0001f4b1 USDCNY = 6.78\nUSDTRUB = 80"
+    output = "\U0001f4b1 USDCNY = 6.78\nUSDTRUB = 80"
+
+    assert source_has_translatable_english(source) is False
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_reject_added_chip_process_number() -> None:
+    source = "Huawei plans to start its own DRAM memory chip production."
+    output = "Huawei планирует запустить собственное производство DRAM по техпроцессу 28 нм."
+
+    assert "added numbers: 28" in translation_issues(source, output)
+
+
 def test_translation_issues_allow_ticker_only_output_without_cyrillic() -> None:
     source = "💱 USDCNY = 6.79\nUSDRUB = 80.2"
     output = "💱 USDCNY = 6.79\nUSDRUB = 80.2"
@@ -354,6 +376,14 @@ def test_validate_dzen_article_rejects_bold_title_and_unbalanced_tags() -> None:
 
     assert "title contains bold HTML" in issues
     assert "unbalanced <b> tags" in issues
+
+
+def test_validate_dzen_article_rejects_generic_question_title() -> None:
+    text = "Почему рынок снова смотрит на нефть.\n\nТекст статьи."
+
+    issues = validate_dzen_bridge_article(text, min_chars=1, max_chars=500)
+
+    assert "title starts with a generic question template" in issues
 
 
 def test_leftover_english_allows_short_attributions_in_russian_text() -> None:

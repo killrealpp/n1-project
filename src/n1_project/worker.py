@@ -106,6 +106,37 @@ async def translate_source_text(model: TextModel, source_text: str) -> str:
     return await model.translate_post(source_text)
 
 
+def prepare_translated_social_text(settings: Settings, text: str) -> str:
+    return prepare_social_post_text(
+        text,
+        max_lines=settings.social_post_max_lines,
+        target_max_chars=settings.social_post_target_max_chars,
+    )
+
+
+async def translate_with_single_repair(
+    model: TextModel,
+    settings: Settings,
+    source_text: str,
+    *,
+    dry_run: bool,
+) -> tuple[str, list[str]]:
+    translated = prepare_translated_social_text(settings, await translate_source_text(model, source_text))
+    issues = [] if dry_run else translation_issues(source_text, translated)
+    if not issues or dry_run or not source_has_translatable_english(source_text):
+        return translated, issues
+
+    repaired = prepare_translated_social_text(
+        settings,
+        await model.repair_translation(source_text, translated, issues),
+    )
+    repaired_issues = translation_issues(source_text, repaired)
+    if not repaired_issues:
+        logging.info("translation repair succeeded after issues=%s", "; ".join(issues))
+        return repaired, []
+    return repaired, repaired_issues
+
+
 def should_notify_translation_failure(attempts_before_failure: int, max_attempts: int) -> bool:
     return attempts_before_failure == 0 or attempts_before_failure + 1 >= max_attempts
 
@@ -151,12 +182,12 @@ async def translate_pending(
 ) -> None:
     for message in db.messages_for_translation(limit=limit, max_attempts=settings.translation_max_attempts):
         try:
-            translated = prepare_social_post_text(
-                await translate_source_text(model, message.source_text),
-                max_lines=settings.social_post_max_lines,
-                target_max_chars=settings.social_post_target_max_chars,
+            translated, issues = await translate_with_single_repair(
+                model,
+                settings,
+                message.source_text,
+                dry_run=dry_run,
             )
-            issues = [] if dry_run else translation_issues(message.source_text, translated)
             if issues:
                 raise ValueError(translation_validation_error(issues, translated))
             if dry_run:
@@ -211,12 +242,12 @@ async def translate_one_row(
         return
 
     try:
-        translated = prepare_social_post_text(
-            await translate_source_text(model, message.source_text),
-            max_lines=settings.social_post_max_lines,
-            target_max_chars=settings.social_post_target_max_chars,
+        translated, issues = await translate_with_single_repair(
+            model,
+            settings,
+            message.source_text,
+            dry_run=dry_run,
         )
-        issues = [] if dry_run else translation_issues(message.source_text, translated)
         if issues:
             raise ValueError(translation_validation_error(issues, translated))
         if not dry_run:
@@ -1318,11 +1349,7 @@ async def amain() -> None:
     admin = build_admin_notifier(settings, dry_run=args.dry_run)
 
     if args.dry_run and args.source_text:
-        translated = prepare_social_post_text(
-            await translate_source_text(model, args.source_text),
-            max_lines=settings.social_post_max_lines,
-            target_max_chars=settings.social_post_target_max_chars,
-        )
+        translated = prepare_translated_social_text(settings, await translate_source_text(model, args.source_text))
         print(json.dumps({"translated_text": translated}, ensure_ascii=False))
         await publish_text_once(settings, translated, dry_run=True)
         if args.article:

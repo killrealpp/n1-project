@@ -267,3 +267,11 @@ Added optional per-channel Telegram bot tokens for Dzen article bridge publishin
 ## [2026-07-10] implementation | Evening cross-platform article footer
 
 Added configurable cross-platform footers for Dzen/channel articles. `DZEN_ARTICLE_FOOTER_ENABLED=true`, `DZEN_ARTICLE_FOOTER_POLICY=evening`, and `DZEN_ARTICLE_FOOTER_ROTATE=true` make Telegram/VK/MAX links appear only in each channel's evening article, once per three articles, with rotating wording. The footer is appended before final Dzen validation so the 4096-character Telegram bridge limit and project article length limits include the link block.
+
+## [2026-07-13] implementation | One daily article per channel and translation repair
+
+Reduced the Dzen/channel article cadence from nine daily articles to three: one `russia`, one `energy`, and one `tech` article. The default windows are now `russia=10:30-12:00`, `energy=14:30-16:00`, and `tech=18:30-20:00`; article targets are shorter at 1600-2800 characters with at least 4 matching posts. Footer policy changed to `always` because each channel now has only one daily article. Article prompts and validation now reject generic titles that start with `Почему`, `Что произошло`, or `Что теперь будет`, and require a concrete company, country, asset, market, or event. Translation validation now treats `24/7` as preserved by `круглосуточно`, recognizes stablecoin-FX symbols such as `USDTRUB`, and performs one repair pass before marking a translated row failed.
+
+## [2026-07-13] ops | Root screen server runbook
+
+Rewrote `docs/server-deploy.md` for the actual VDS workflow: run as `root` from `~/n1-project`, update with `git pull --ff-only`, use the existing `.venv`, check with `compileall` and `--doctor`, and run the worker in a named `screen` session `n1-worker`. The guide now avoids `sudo` and `systemctl`, includes backup, env, queue inspection, restart, logs, and emergency commands.

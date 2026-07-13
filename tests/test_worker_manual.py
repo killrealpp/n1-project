@@ -43,6 +43,24 @@ class FailingTextModel(TextModel):
         raise NotImplementedError
 
 
+class RepairingTextModel(TextModel):
+    async def translate_post(self, source_text: str) -> str:
+        return "Huawei планирует выпускать DRAM по техпроцессу 28 нм."
+
+    async def repair_translation(self, source_text: str, translated_text: str, issues: list[str]) -> str:
+        return "Huawei планирует выпускать DRAM."
+
+    async def write_dzen_article(
+        self,
+        posts: list[str],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+    ) -> str:
+        raise NotImplementedError
+
+
 def test_exception_report_includes_traceback_details() -> None:
     def raise_error() -> None:
         raise RuntimeError("boom")
@@ -152,6 +170,23 @@ async def test_translate_one_row_passthrough_for_hashtag_only_signal(tmp_path: P
     assert message is not None
     assert message.status == "translated"
     assert message.translated_text == source_text
+    assert '"ok": true' in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_translate_one_row_repairs_invalid_model_output_once(tmp_path: Path, capsys) -> None:
+    settings = Settings.from_mapping(project_root=tmp_path, env={})
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    source_text = "Huawei plans to start its own DRAM memory chip production."
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", source_text))
+
+    await translate_one_row(db, settings, RepairingTextModel(), row_id, dry_run=False)
+
+    message = db.message_by_id(row_id)
+    assert message is not None
+    assert message.status == "translated"
+    assert message.translated_text == "Huawei планирует выпускать DRAM."
     assert '"ok": true' in capsys.readouterr().out
 
 

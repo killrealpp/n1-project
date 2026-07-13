@@ -8,7 +8,7 @@ The Dzen channel is connected to a public Telegram channel through the Dzen sync
 
 For this project, the automation sends generated article text directly to channel-specific bridge chat ids by default. `DZEN_TELEGRAM_BRIDGE_CHAT_ID` remains the legacy/default Russia bridge fallback, while `DZEN_RUSSIA_TELEGRAM_BRIDGE_CHAT_ID`, `DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID`, and `DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID` route the multi-channel article flow. Energy and Tech can use their own bots through `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`. `DZEN_ARTICLE_REVIEW_ENABLED=true` can temporarily restore the admin button review gate.
 
-The article footer is controlled by `DZEN_ARTICLE_FOOTER_*`. The default policy is `evening`, so Telegram/VK/MAX links are appended only to evening articles and rotate between several short variants.
+The article footer is controlled by `DZEN_ARTICLE_FOOTER_*`. The default policy is `always`, so Telegram/VK/MAX links are appended to each daily channel article and rotate between several short variants.
 
 ## Important Rules
 

@@ -31,17 +31,17 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "DZEN_ENERGY_TELEGRAM_BOT_TOKEN=energy-token",
                 "DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID=-100tech",
                 "DZEN_TECH_TELEGRAM_BOT_TOKEN=tech-token",
-                "DZEN_ARTICLE_WINDOWS=russia=09:00-10:00|14:00-15:00;energy=09:20-10:20;tech=09:40-10:40",
+                "DZEN_ARTICLE_WINDOWS=russia=10:30-12:00;energy=14:30-16:00;tech=18:30-20:00",
                 "DZEN_ARTICLE_RANDOMIZE_TIMES=true",
                 "DZEN_ARTICLE_SLOT_WINDOW_MINUTES=7",
                 "DZEN_ARTICLE_PARSE_MODE=HTML",
                 "DZEN_ARTICLE_FOOTER_ENABLED=true",
-                "DZEN_ARTICLE_FOOTER_POLICY=evening",
+                "DZEN_ARTICLE_FOOTER_POLICY=always",
                 "DZEN_ARTICLE_FOOTER_ROTATE=true",
                 "DZEN_ARTICLE_FOOTER_TELEGRAM_URL=https://t.me/bazar",
                 "DZEN_ARTICLE_FOOTER_VK_URL=https://vk.com/bazar",
                 "DZEN_ARTICLE_FOOTER_MAX_URL=https://max.ru/bazar",
-                "DZEN_ARTICLE_MIN_POSTS=3",
+                "DZEN_ARTICLE_MIN_POSTS=4",
                 "DZEN_ARTICLE_CANDIDATE_LIMIT=30",
                 "DZEN_ARTICLE_REVIEW_ENABLED=true",
                 "DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS=4",
@@ -80,20 +80,20 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
         "tech": "tech-token",
     }
     assert settings.dzen_article_windows == {
-        "russia": ["09:00-10:00", "14:00-15:00"],
-        "energy": ["09:20-10:20"],
-        "tech": ["09:40-10:40"],
+        "russia": ["10:30-12:00"],
+        "energy": ["14:30-16:00"],
+        "tech": ["18:30-20:00"],
     }
     assert settings.dzen_article_randomize_times is True
     assert settings.dzen_article_slot_window_minutes == 7
     assert settings.dzen_article_parse_mode == "HTML"
     assert settings.dzen_article_footer_enabled is True
-    assert settings.dzen_article_footer_policy == "evening"
+    assert settings.dzen_article_footer_policy == "always"
     assert settings.dzen_article_footer_rotate is True
     assert settings.dzen_article_footer_telegram_url == "https://t.me/bazar"
     assert settings.dzen_article_footer_vk_url == "https://vk.com/bazar"
     assert settings.dzen_article_footer_max_url == "https://max.ru/bazar"
-    assert settings.dzen_article_min_posts == 3
+    assert settings.dzen_article_min_posts == 4
     assert settings.dzen_article_candidate_limit == 30
     assert settings.admin_telegram_chat_id == "-100admin"
     assert settings.admin_notifications_enabled is True

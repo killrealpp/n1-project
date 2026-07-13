@@ -14,9 +14,9 @@ if TYPE_CHECKING:
 
 
 DEFAULT_CHANNEL_WINDOWS = {
-    "russia": ["09:00-10:00", "14:00-15:00", "18:30-19:30"],
-    "energy": ["09:20-10:20", "14:25-15:25", "19:15-20:15"],
-    "tech": ["09:40-10:40", "14:50-15:50", "20:00-21:00"],
+    "russia": ["10:30-12:00"],
+    "energy": ["14:30-16:00"],
+    "tech": ["18:30-20:00"],
 }
 DEFAULT_CHANNEL_NAMES = {
     "russia": "BAZAR RUSSIA",
@@ -37,7 +37,7 @@ DEFAULT_TOPIC_HINTS = {
         "технологические компании и глобальные технорынки"
     ),
 }
-SLOT_LABELS = ("morning", "afternoon", "evening")
+SLOT_LABELS = ("daily", "slot2", "slot3")
 TOPIC_PRIORITY = ("tech", "energy", "russia")
 
 

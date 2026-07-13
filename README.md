@@ -7,7 +7,7 @@ Automation for reading English Telegram posts, translating them into Russian, pu
 - Telegram source reading: MTProto via Telethon.
 - Short-post translation: OpenRouter by default through `TRANSLATION_PROVIDER=openrouter`.
 - Publishing: VK, MAX, and Telegram are supported through `PUBLISH_ORDER=vk,max,telegram` when MAX credentials are filled.
-- Dzen/channel articles: 3 daily article channels are supported (`russia`, `energy`, `tech`), each with 3 randomized daily windows; generated articles publish directly through the matching Telegram bridge chat unless `DZEN_ARTICLE_REVIEW_ENABLED=true`.
+- Dzen/channel articles: 3 daily article channels are supported (`russia`, `energy`, `tech`), one article per channel per day with a randomized minute inside its daily window; generated articles publish directly through the matching Telegram bridge chat unless `DZEN_ARTICLE_REVIEW_ENABLED=true`.
 - OpenRouter: production LLM path for both translation and Dzen article writing.
 - MAX: ready when `MAX_ACCESS_TOKEN`, `MAX_CHAT_ID`, and `PUBLISH_ORDER` are configured.
 
@@ -21,7 +21,7 @@ Automation for reading English Telegram posts, translating them into Russian, pu
 
 - `.env.example` - configuration contract without real secrets.
 - `docs/runbook.md` - local operation guide.
-- `docs/server-deploy.md` - server deployment commands.
+- `docs/server-deploy.md` - current root/screen server deployment commands, without `sudo` or `systemctl`.
 - `docs/dzen-article-playbook.md` - Dzen article rules.
 - `docs/EXECPLAN.md` - living implementation plan.
 

@@ -4,6 +4,7 @@ import html
 import re
 
 URL_RE = re.compile(r"https?://[^\s)>\]]+", re.IGNORECASE)
+AROUND_CLOCK_RE = re.compile(r"(?<!\d)24\s*/\s*7(?!\d)")
 NUMBER_RE = re.compile(
     r"(?<![\w.])"
     r"(?:\d{1,3}(?:[,\.\u00a0\u202f ]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)"
@@ -72,6 +73,10 @@ BOLD_BLOCK_RE = re.compile(r"^\s*<b>[^<]{1,120}</b>\s*$", re.IGNORECASE)
 HTML_TAG_RE = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>")
 EMOJI_RE = re.compile(r"[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF\u2600-\u27BF]")
 LEADING_EMOJI_RE = re.compile(r"^\s*((?:[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF\u2600-\u27BF]\ufe0f?\s*)+)")
+GENERIC_ARTICLE_TITLE_RE = re.compile(
+    r"^\s*(?:почему|что\s+произошло|что\s+теперь\s+будет|что\s+означает)\b",
+    re.IGNORECASE,
+)
 KNOWN_ATTRIBUTIONS = {
     "AUTOSTAT",
     "BBG",
@@ -155,6 +160,11 @@ def mask_date_tokens(text: str) -> str:
 def extract_numbers(text: str) -> set[str]:
     numbers = extract_date_tokens(text)
     number_text = mask_date_tokens(text)
+    if AROUND_CLOCK_RE.search(number_text):
+        numbers.add("24/7")
+        number_text = AROUND_CLOCK_RE.sub(" ", number_text)
+    if "круглосуточ" in text.lower():
+        numbers.add("24/7")
     numbers.update(NUMBER_RE.findall(number_text))
     numbers.update(PERIOD_NUMBER_RE.findall(number_text))
     numbers.update(ALNUM_MODEL_NUMBER_RE.findall(number_text))
@@ -418,6 +428,8 @@ def validate_dzen_bridge_article(text: str, min_chars: int, max_chars: int) -> l
         issues.append(f"title too long: {len(title)} chars; max is 140")
     if extract_urls(title):
         issues.append("title contains a link")
+    if GENERIC_ARTICLE_TITLE_RE.search(title):
+        issues.append("title starts with a generic question template")
     issues.extend(article_html_issues(text))
     return issues
 
@@ -442,6 +454,8 @@ def is_market_symbol_word(word: str) -> bool:
     if len(word) <= 5:
         return True
     if len(word) == 6 and word[:3] in CURRENCY_CODES and word[3:] in CURRENCY_CODES:
+        return True
+    if len(word) == 7 and word[:4] in {"USDC", "USDT"} and word[4:] in CURRENCY_CODES:
         return True
     return False
 

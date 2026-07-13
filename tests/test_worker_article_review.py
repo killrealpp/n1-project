@@ -184,7 +184,7 @@ async def test_generate_dzen_article_publishes_directly_when_review_disabled(tmp
 
 
 @pytest.mark.asyncio
-async def test_generate_dzen_article_appends_footer_for_evening_slot(tmp_path, monkeypatch) -> None:
+async def test_generate_dzen_article_appends_footer_for_daily_slot(tmp_path, monkeypatch) -> None:
     settings = Settings.from_mapping(
         {
             "TELEGRAM_BOT_TOKEN": "token",
@@ -211,12 +211,50 @@ async def test_generate_dzen_article_appends_footer_for_evening_slot(tmp_path, m
         AdminNotifier("token", "123456789", dry_run=True),
         dry_run=False,
         force=True,
-        slot_key="2026-07-06 russia:evening",
+        slot_key="2026-07-06 russia:daily",
     )
 
     assert "https://t.me/bazar" in fake_publisher.published_texts[0]
     assert "https://vk.com/bazar" in fake_publisher.published_texts[0]
     assert "https://max.ru/bazar" in fake_publisher.published_texts[0]
+
+
+@pytest.mark.asyncio
+async def test_generate_dzen_article_skips_already_published_slot(tmp_path, monkeypatch) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_TARGET_MIN_CHARS": "50",
+            "DZEN_ARTICLE_TARGET_MAX_CHARS": "1000",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    db.record_article(
+        "Existing title.\n\nExisting body.",
+        "published",
+        destination_id="dzen-message",
+        slot_key="2026-07-06 russia:daily",
+    )
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Oil is higher"))
+    db.mark_translated(row_id, "Нефть растет")
+    fake_publisher = FakeDzenPublisher()
+    monkeypatch.setattr("n1_project.worker.build_publishers", lambda settings, dry_run=False: {"dzen": fake_publisher})
+
+    await generate_dzen_article(
+        db,
+        settings,
+        ArticleModel(),
+        AdminNotifier("token", "123456789", dry_run=True),
+        dry_run=False,
+        force=True,
+        slot_key="2026-07-06 russia:daily",
+    )
+
+    assert fake_publisher.published_texts == []
+    assert db.article_for_slot("2026-07-06 russia:daily").text == "Existing title.\n\nExisting body."
 
 
 @pytest.mark.asyncio

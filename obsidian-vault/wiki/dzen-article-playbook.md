@@ -4,13 +4,13 @@ A Dzen article for this project should be a concise Russian editorial digest bui
 
 ## Target Format
 
-- Total length: 2500-3900 characters.
+- Total length: 1600-2800 characters.
 - First sentence: title, under 140 characters.
 - Transport: Telegram message sent to Dzen bridge chat.
-- Structure: title sentence, opening paragraph, 3-5 compact blocks, closing synthesis.
+- Structure: title sentence, opening paragraph, 2-4 compact blocks, closing synthesis.
 - The first 1-2 paragraphs must clearly describe the subject because Dzen generates the card description from early text.
 - Direct Dzen articles can be much longer, but bridge articles stay under Telegram transport limits.
-- Current default cadence: nine channel articles per day: three for `russia`, three for `energy`, and three for `tech`.
+- Current default cadence: three channel articles per day: one for `russia`, one for `energy`, and one for `tech`.
 - Preferred posting windows are configured per channel. The worker chooses a stable random minute inside each window for the current date.
 
 ## Writing Pattern
@@ -31,7 +31,7 @@ Current production mode is direct bridge publishing with `DZEN_ARTICLE_REVIEW_EN
 
 Energy and Tech can publish through their own Telegram bots via `DZEN_ENERGY_TELEGRAM_BOT_TOKEN` and `DZEN_TECH_TELEGRAM_BOT_TOKEN`; Russia falls back to the main `TELEGRAM_BOT_TOKEN`.
 
-The cross-platform footer should appear only in evening articles by default. This gives each channel one link block per three articles and avoids a repetitive promotional tail in all nine daily posts. Footer wording rotates by slot key and should use direct URLs for Telegram, VK, and MAX.
+The cross-platform footer should appear in each daily channel article by default. Since each channel now publishes one article per day, links stay visible without repeating three times per channel. Footer wording rotates by slot key and should use direct URLs for Telegram, VK, and MAX.
 
 ## Daily Workflow
 
@@ -52,18 +52,12 @@ The title and first paragraph are the traffic gate. Make the card concrete befor
 
 Useful title shapes for this project:
 
-- `Почему рынок испугался...`;
-- `Что произошло...`;
-- `Что теперь будет...`;
-- `Почему это важно...`;
-- `Что означает...`;
-- `Что изменилось...`;
-- `Рынок получил неожиданный сигнал...`;
-- `Инвесторы не ожидали...`;
-- fact + consequence;
+- concrete actor + consequence;
 - list of concrete market items + unifying point;
-- event/fact + restrained question: what changed, why it matters, what to watch;
+- event/fact + restrained consequence: what changed, why it matters, what to watch;
 - exact numbers/names/tickers from the source when they are available.
+
+Do not start titles with `Почему`, `Что произошло`, `Что теперь будет`, or `Что означает`. The headline should name a company, country, asset, market, or event from the source posts, not hide the subject behind a repeated question template.
 
 Adapted lessons from Dzen headline practice:
 

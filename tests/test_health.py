@@ -57,10 +57,10 @@ def test_settings_health_flags(tmp_path: Path) -> None:
     assert [item["key"] for item in health["dzen_article_channels"]] == ["russia", "energy", "tech"]
     assert [item["bot_configured"] for item in health["dzen_article_channels"]] == [True, True, True]
     assert [item["bot_source"] for item in health["dzen_article_channels"]] == ["default", "channel", "channel"]
-    assert len(health["dzen_article_schedule_today"]) == 9
+    assert len(health["dzen_article_schedule_today"]) == 3
     assert health["dzen_article_parse_mode"] == "HTML"
     assert health["dzen_article_footer"]["enabled"] is True
-    assert health["dzen_article_footer"]["policy"] == "evening"
+    assert health["dzen_article_footer"]["policy"] == "always"
     assert health["dzen_article_footer"]["links_configured"] == {
         "telegram": True,
         "vk": True,

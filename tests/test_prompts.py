@@ -16,13 +16,13 @@ def test_translation_prompt_requests_strict_literal_translation() -> None:
 
 
 def test_article_prompt_requests_theme_grouping() -> None:
-    prompt = article_user_prompt(["BTC is higher", "RGBI is below 112"], 2500, 3900)
+    prompt = article_user_prompt(["BTC is higher", "RGBI is below 112"], 1600, 2800)
 
-    assert "от 2500 до 3900 символов" in prompt
+    assert "от 1600 до 2800 символов" in prompt
     assert "Пиши на русском языке" in prompt
     assert "не обязательным чек-листом" in prompt
     assert "складываются в понятную тему" in prompt
-    assert "3-6 связанных постов" in prompt
+    assert "4-8 связанных постов" in prompt
     assert "Не давай инвестиционных советов" in prompt
     assert "Dzen" in prompt or "Дзена" in prompt
     assert "Первый абзац должен работать как описание карточки Дзена" in prompt
@@ -39,8 +39,9 @@ def test_article_prompt_requests_human_dzen_style() -> None:
     assert "опытный финансовый журналист" in prompt
     assert "как Bloomberg, Reuters, РБК" in prompt
     assert "формируется противоречивая картина" in prompt
-    assert "Что произошло" in prompt
-    assert "Почему это важно" in prompt
+    assert "Не начинай заголовок" in prompt
+    assert "Что произошло..." not in prompt
+    assert "Почему это важно..." not in prompt
     assert "По данным" in prompt
     assert "Средняя длина - 10-18 слов" in prompt
     assert "рынок остается чувствительным" in prompt
