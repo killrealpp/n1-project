@@ -7,6 +7,7 @@ import logging
 import sys
 import time
 import traceback
+from collections import Counter
 from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime
@@ -31,16 +32,29 @@ from n1_project.db import QueueDatabase
 from n1_project.domain import ArticleRecord, QueuedMessage, SourcePost
 from n1_project.formatters import prepare_social_post_text
 from n1_project.health import run_health_check
+from n1_project.images import ArticleImage, PexelsImageProvider, build_pexels_photo_query
 from n1_project.llm import TextModel, article_user_prompt, build_text_model, translation_user_prompt
 from n1_project.publishers import build_publishers
 from n1_project.publishers.telegram import DzenBridgePublisher
 from n1_project.scheduler import current_slot, local_now
+from n1_project.story_plan import (
+    StoryPlan,
+    StoryPlanParseError,
+    caption_editorial_issues,
+    fallback_story_plan,
+    parse_story_plan_json,
+    selected_messages_for_plan,
+    story_candidates_from_messages,
+    story_plan_issues,
+    story_plan_to_json,
+)
 from n1_project.telegram_public_preview import fetch_public_preview_posts
 from n1_project.telegram_source import TelegramSource
 from n1_project.validators import (
     format_dzen_article_text,
     source_has_translatable_english,
     translation_issues,
+    trim_dzen_article_to_max_chars,
     validate_dzen_bridge_article,
 )
 
@@ -486,6 +500,62 @@ def dzen_article_date_label(settings: Settings, slot_key: str | None = None, now
     return f"{current.day} {RU_MONTH_NAMES[current.month]} {current.year} года"
 
 
+def dzen_article_effective_max_chars(settings: Settings) -> int:
+    if settings.dzen_article_image_enabled:
+        return min(settings.dzen_article_target_max_chars, settings.telegram_photo_caption_max_chars)
+    return settings.dzen_article_target_max_chars
+
+
+async def plan_dzen_story_with_validation(
+    model: TextModel,
+    messages: list[QueuedMessage],
+    settings: Settings,
+    *,
+    review_note: str | None = None,
+    article_date_label: str | None = None,
+    article_channel: ArticleChannel | None = None,
+    max_attempts: int = 2,
+) -> tuple[StoryPlan, list[str]]:
+    candidates = story_candidates_from_messages(messages)
+    if not candidates:
+        raise ValueError("no story candidates available")
+
+    note = article_channel_review_note(article_channel, review_note) if article_channel else review_note
+    channel_note = article_channel.topic_hint if article_channel else None
+    effective_max_chars = dzen_article_effective_max_chars(settings)
+    effective_min_chars = min(settings.dzen_article_target_min_chars, effective_max_chars)
+    issues: list[str] = []
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            raw_plan = await model.plan_dzen_story(
+                candidates,
+                min_chars=effective_min_chars,
+                max_chars=effective_max_chars,
+                review_note=note,
+                article_date_label=article_date_label,
+                channel_note=channel_note,
+            )
+            return parse_story_plan_json(raw_plan, candidates), []
+        except (StoryPlanParseError, NotImplementedError, ValueError) as exc:
+            issues = [str(exc)]
+            logging.warning("Dzen story plan validation failed attempt=%s issues=%s", attempt, "; ".join(issues))
+            note = (
+                "Предыдущий story plan не прошел редакторскую проверку.\n"
+                f"Проблемы: {'; '.join(issues)}.\n"
+                "Верни новый JSON-план. Если cluster нельзя доказать, выбери mode=\"single\"."
+            )
+            if article_channel:
+                note = article_channel_review_note(article_channel, note)
+
+    fallback = fallback_story_plan(candidates)
+    fallback_issues = story_plan_issues(fallback, candidates)
+    if fallback_issues:
+        return fallback, fallback_issues
+    logging.warning("Dzen story plan fell back to single message id=%s", fallback.selected_message_ids[0])
+    return fallback, []
+
+
 async def draft_dzen_article_with_validation(
     model: TextModel,
     posts: list[str],
@@ -494,15 +564,19 @@ async def draft_dzen_article_with_validation(
     review_note: str | None = None,
     article_date_label: str | None = None,
     article_channel: ArticleChannel | None = None,
+    story_plan: StoryPlan | None = None,
     slot_key: str | None = None,
     max_attempts: int = 3,
 ) -> tuple[str, list[str]]:
     note = article_channel_review_note(article_channel, review_note) if article_channel else review_note
     article = ""
     issues: list[str] = []
+    effective_max_chars = dzen_article_effective_max_chars(settings)
+    effective_min_chars = min(settings.dzen_article_target_min_chars, effective_max_chars)
     footer_reserve = dzen_article_footer_reserve_chars(settings, slot_key)
-    draft_min_chars = max(500, settings.dzen_article_target_min_chars - footer_reserve)
-    draft_max_chars = max(draft_min_chars, settings.dzen_article_target_max_chars - footer_reserve)
+    body_max_chars = max(1, effective_max_chars - footer_reserve)
+    draft_min_chars = min(max(500, effective_min_chars - footer_reserve), body_max_chars)
+    draft_max_chars = body_max_chars
     for attempt in range(1, max_attempts + 1):
         article = await model.write_dzen_article(
             posts,
@@ -510,22 +584,40 @@ async def draft_dzen_article_with_validation(
             max_chars=draft_max_chars,
             review_note=note,
             article_date_label=article_date_label,
+            story_plan=story_plan,
         )
-        article = format_dzen_article_text(article, article_date_label=article_date_label)
-        article = append_dzen_article_footer(article, settings, slot_key)
+        article_body = format_dzen_article_text(article, article_date_label=article_date_label)
+        article = append_dzen_article_footer(article_body, settings, slot_key)
         issues = validate_dzen_bridge_article(
             article,
-            min_chars=settings.dzen_article_target_min_chars,
-            max_chars=settings.dzen_article_target_max_chars,
+            min_chars=effective_min_chars,
+            max_chars=effective_max_chars,
         )
+        if story_plan:
+            issues.extend(caption_editorial_issues(article, story_plan))
+        if issues and len(article) > effective_max_chars:
+            trimmed_body = trim_dzen_article_to_max_chars(article_body, body_max_chars)
+            if trimmed_body != article_body:
+                article = append_dzen_article_footer(trimmed_body, settings, slot_key)
+                issues = validate_dzen_bridge_article(
+                    article,
+                    min_chars=effective_min_chars,
+                    max_chars=effective_max_chars,
+                )
+                if story_plan:
+                    issues.extend(caption_editorial_issues(article, story_plan))
+                if not issues:
+                    logging.info("Dzen article draft trimmed to fit max_chars=%s", effective_max_chars)
+                    return article, []
         if not issues:
             return article, []
         note = (
-            "Предыдущий черновик не прошел валидацию и должен быть переписан.\n"
+            "Предыдущий caption не прошел валидацию и должен быть переписан.\n"
             f"Проблемы проверки: {'; '.join(issues)}.\n"
-            "Верни новую статью, где первое предложение - короткий заголовок Дзена до 140 символов, "
-            "без ссылок и как отдельное предложение перед первым абзацем. "
-            "Уложись в заданный диапазон длины и сохраняй только факты из исходных постов."
+            "Верни новый caption, где первое предложение - короткий заголовок до 140 символов, "
+            "без ссылок, без вопросительного знака и без переобещания. "
+            "Не используй видимые шаблонные метки `Что случилось`, `Почему важно`, `Что смотреть`. "
+            "Уложись в заданный диапазон длины, докажи тезис через выбранные источники и сохраняй только факты из исходных постов."
         )
         if article_channel:
             note = article_channel_review_note(article_channel, note)
@@ -567,11 +659,18 @@ def dzen_publisher_for_channel(settings: Settings, channel: ArticleChannel, dry_
             max_chars=settings.dzen_post_max_text_chars,
             dry_run=dry_run,
             parse_mode=settings.dzen_article_parse_mode or None,
+            caption_max_chars=settings.telegram_photo_caption_max_chars,
         )
     publisher = build_publishers(settings, dry_run=dry_run).get("dzen")
     if publisher:
         return publisher
     return None
+
+
+async def publish_dzen_article_payload(publisher, article: str, image: ArticleImage | None):
+    if image and hasattr(publisher, "publish_photo"):
+        return await publisher.publish_photo(image.url, article)
+    return await publisher.publish_text(article)
 
 
 async def publish_approved_dzen_article(
@@ -589,9 +688,26 @@ async def publish_approved_dzen_article(
         await notify_admin(admin, "Dzen publish not configured", error)
         raise ValueError(error)
 
-    result = await publisher.publish_text(article.text)
+    image = None
+    if article.image_url:
+        image = ArticleImage(
+            url=article.image_url,
+            query=article.image_query or "",
+        )
+    result = await publish_dzen_article_payload(publisher, article.text, image)
     if dry_run:
-        print(json.dumps({"platform": "dzen", "ok": result.ok, "article": article.text}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "platform": "dzen",
+                    "ok": result.ok,
+                    "article": article.text,
+                    "image_url": article.image_url,
+                    "image_query": article.image_query,
+                },
+                ensure_ascii=False,
+            )
+        )
         return
     db.update_article_status(
         article.id,
@@ -623,6 +739,67 @@ def dzen_article_candidate_messages(
     return messages
 
 
+def dominant_article_topic(messages: list[QueuedMessage], article: str, channel: ArticleChannel) -> str | None:
+    topics = [classify_message_topic(message) for message in messages]
+    counts = Counter(topic for topic in topics if topic)
+    if counts:
+        return str(counts.most_common(1)[0][0])
+    detected = classify_text_topic(article)
+    if detected:
+        return detected
+    return channel.key if channel.key in {"markets", "russia", "energy", "tech"} else None
+
+
+async def select_dzen_article_image(
+    settings: Settings,
+    *,
+    article: str,
+    messages: list[QueuedMessage],
+    channel: ArticleChannel,
+    story_plan: StoryPlan | None = None,
+    dry_run: bool,
+) -> ArticleImage | None:
+    if not settings.dzen_article_image_enabled:
+        return None
+    provider = PexelsImageProvider(
+        api_key=settings.pexels_api_key,
+        base_url=settings.pexels_api_base_url,
+        orientation=settings.pexels_photo_orientation,
+        size=settings.pexels_photo_size,
+        per_page=settings.pexels_photo_per_page,
+        dry_run=dry_run,
+    )
+    if not provider.configured:
+        logging.warning("Dzen image publishing enabled, but PEXELS_API_KEY is empty")
+        return None
+    query = story_plan.image_query.strip() if story_plan and story_plan.image_query.strip() else ""
+    if not query:
+        topic = dominant_article_topic(messages, article, channel)
+        query = build_pexels_photo_query(
+            [article, *(message.translated_text or message.source_text for message in messages)],
+            topic=topic,
+        )
+    try:
+        image = await provider.search_photo(query)
+    except Exception as exc:
+        logging.warning("Pexels image lookup failed query=%s error=%s", query, exc)
+        return None
+    if not image:
+        logging.warning("Pexels image lookup returned no photos query=%s", query)
+        return None
+    return image
+
+
+def append_image_credit_if_fits(article: str, settings: Settings, image: ArticleImage | None) -> str:
+    if not image or not settings.dzen_article_image_credit_enabled or not image.credit:
+        return article
+    candidate = article.rstrip() + "\n\n" + image.credit
+    max_chars = min(settings.dzen_article_target_max_chars, settings.telegram_photo_caption_max_chars)
+    if len(candidate) <= max_chars:
+        return candidate
+    return article
+
+
 def should_auto_publish_dzen_article(settings: Settings, now: datetime | None = None) -> bool:
     current = now or local_now(settings.app_timezone)
     return settings.dzen_article_auto_publish_weekends and current.weekday() >= 5
@@ -637,16 +814,27 @@ async def publish_generated_dzen_article(
     dry_run: bool,
     slot_key: str | None,
     article_channel: ArticleChannel | None = None,
+    image: ArticleImage | None = None,
+    story_plan: StoryPlan | None = None,
 ) -> int:
     channel = article_channel or article_channel_from_slot(settings, slot_key)
     publisher = dzen_publisher_for_channel(settings, channel, dry_run=dry_run)
     if not publisher:
         raise ValueError(f"Dzen bridge is not configured for {channel.key}")
-    result = await publisher.publish_text(article)
+    result = await publish_dzen_article_payload(publisher, article, image)
     if dry_run:
         print(
             json.dumps(
-                {"platform": "dzen", "channel": channel.key, "ok": result.ok, "article": article},
+                {
+                    "platform": "dzen",
+                    "channel": channel.key,
+                    "ok": result.ok,
+                    "article": article,
+                    "story_plan": story_plan_to_json(story_plan) if story_plan else None,
+                    "selected_message_ids": list(story_plan.selected_message_ids) if story_plan else message_ids,
+                    "image_url": image.url if image else None,
+                    "image_query": image.query if image else None,
+                },
                 ensure_ascii=False,
             )
         )
@@ -657,7 +845,12 @@ async def publish_generated_dzen_article(
         destination_id=result.destination_id,
         error=result.error,
         message_ids=message_ids if result.ok else [],
+        selected_message_ids=list(story_plan.selected_message_ids) if story_plan else message_ids,
         slot_key=slot_key,
+        image_url=image.url if image else None,
+        image_query=image.query if image else None,
+        image_credit=image.credit if image else None,
+        plan_json=story_plan_to_json(story_plan) if story_plan else None,
     )
     if not result.ok:
         await notify_admin(admin, "Dzen article publish failed", result.error or "unknown publish error")
@@ -697,15 +890,47 @@ async def generate_dzen_article(
             settings.dzen_article_min_posts,
         )
         return
-    posts = [message.translated_text or "" for message in messages]
-    message_ids = [message.id for message in messages]
     date_label = dzen_article_date_label(settings, slot_key=slot_key)
+    story_plan, plan_issues = await plan_dzen_story_with_validation(
+        model,
+        messages,
+        settings,
+        article_date_label=date_label,
+        article_channel=channel,
+    )
+    selected_messages = selected_messages_for_plan(messages, story_plan)
+    selected_message_ids = [message.id for message in selected_messages]
+    plan_json = story_plan_to_json(story_plan)
+    if plan_issues and not dry_run:
+        article_id = db.record_article(
+            text="",
+            status="failed_validation",
+            error="; ".join(plan_issues),
+            message_ids=[],
+            selected_message_ids=selected_message_ids,
+            slot_key=slot_key,
+            plan_json=plan_json,
+        )
+        await notify_admin(
+            admin,
+            "Dzen story plan validation failed",
+            f"article_id={article_id}\nchannel={channel.key}\nissues={'; '.join(plan_issues)}",
+        )
+        return
+    if plan_issues:
+        logging.warning("dry-run Dzen story plan validation issues: %s", "; ".join(plan_issues))
+    if not selected_messages:
+        logging.warning("Dzen story plan selected no usable source messages channel=%s", channel.key)
+        return
+
+    posts = [message.translated_text or "" for message in selected_messages]
     article, issues = await draft_dzen_article_with_validation(
         model,
         posts,
         settings,
         article_date_label=date_label,
         article_channel=channel,
+        story_plan=story_plan,
         slot_key=slot_key,
     )
     if issues and not dry_run:
@@ -714,19 +939,67 @@ async def generate_dzen_article(
             status="failed_validation",
             error="; ".join(issues),
             message_ids=[],
+            selected_message_ids=selected_message_ids,
             slot_key=slot_key,
+            plan_json=plan_json,
         )
         await notify_admin(
             admin,
             "Dzen article validation failed",
             f"article_id={article_id}\nchannel={channel.key}\nissues={'; '.join(issues)}",
         )
-        raise ValueError(f"Dzen article validation failed article_id={article_id}: {'; '.join(issues)}")
+        logging.error(
+            "Dzen article validation failed article_id=%s channel=%s issues=%s",
+            article_id,
+            channel.key,
+            "; ".join(issues),
+        )
+        return
     if issues:
         logging.warning("dry-run Dzen article validation issues: %s", "; ".join(issues))
 
+    image = await select_dzen_article_image(
+        settings,
+        article=article,
+        messages=selected_messages,
+        channel=channel,
+        story_plan=story_plan,
+        dry_run=dry_run,
+    )
+    if settings.dzen_article_image_required and not image and not dry_run:
+        article_id = db.record_article(
+            text=article,
+            status="failed_image",
+            error="Pexels image lookup returned no usable photo",
+            message_ids=[],
+            selected_message_ids=selected_message_ids,
+            slot_key=slot_key,
+            plan_json=plan_json,
+        )
+        await notify_admin(
+            admin,
+            "Dzen article image failed",
+            f"article_id={article_id}\nchannel={channel.key}\nslot={slot_key or 'manual'}",
+        )
+        return
+    article = append_image_credit_if_fits(article, settings, image)
+
     if dry_run:
-        print(json.dumps({"platform": "dzen", "channel": channel.key, "ok": True, "article": article}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "platform": "dzen",
+                    "channel": channel.key,
+                    "ok": True,
+                    "article": article,
+                    "story_plan": plan_json,
+                    "selected_message_ids": selected_message_ids,
+                    "image_url": image.url if image else None,
+                    "image_query": image.query if image else None,
+                },
+                ensure_ascii=False,
+            )
+        )
         return
 
     if settings.dzen_article_review_enabled and not should_auto_publish_dzen_article(settings):
@@ -739,9 +1012,14 @@ async def generate_dzen_article(
         article_id = db.record_article(
             text=article,
             status="pending_review",
-            message_ids=message_ids,
+            message_ids=selected_message_ids,
+            selected_message_ids=selected_message_ids,
             slot_key=slot_key,
             review_attempts=attempt,
+            image_url=image.url if image else None,
+            image_query=image.query if image else None,
+            image_credit=image.credit if image else None,
+            plan_json=plan_json,
         )
         result = await admin.send_article_review(
             article_id=article_id,
@@ -762,16 +1040,21 @@ async def generate_dzen_article(
         settings,
         admin,
         article,
-        message_ids=message_ids,
+        message_ids=selected_message_ids,
         dry_run=dry_run,
         slot_key=slot_key,
         article_channel=channel,
+        image=image,
+        story_plan=story_plan,
     )
     if settings.dzen_article_review_enabled and should_auto_publish_dzen_article(settings):
         await notify_admin(
             admin,
             "Dzen article auto-published",
-            f"article_id={article_id}\nchannel={channel.key}\nslot={slot_key or 'manual'}\nsource_candidates={len(message_ids)}",
+            (
+                f"article_id={article_id}\nchannel={channel.key}\nslot={slot_key or 'manual'}\n"
+                f"source_candidates={len(messages)}\nselected_messages={len(selected_message_ids)}"
+            ),
             level="info",
         )
 
@@ -931,20 +1214,41 @@ async def handle_article_reject(
         await notify_admin(admin, "Dzen article regeneration failed", f"article_id={article.id}\n{error}")
         return
 
-    posts = [message.translated_text or "" for message in messages]
     review_note = (
         "Предыдущий черновик отклонен редактором. Сделай заметно другой и более сильный вариант. "
         "Улучши заголовок и первый экран, сохраняй каждый факт привязанным к источникам, "
         "не повторяй формулировки отклоненного текста и сделай русский стиль живее и прямее."
     )
     channel = article_channel_from_slot(settings, article.slot_key)
+    date_label = dzen_article_date_label(settings, slot_key=article.slot_key)
+    story_plan, plan_issues = await plan_dzen_story_with_validation(
+        model,
+        messages,
+        settings,
+        review_note=review_note,
+        article_date_label=date_label,
+        article_channel=channel,
+    )
+    selected_messages = selected_messages_for_plan(messages, story_plan)
+    selected_message_ids = [message.id for message in selected_messages]
+    plan_json = story_plan_to_json(story_plan)
+    if plan_issues or not selected_messages:
+        issue_text = "; ".join(plan_issues or ["story plan selected no usable source messages"])
+        db.update_article_status(article.id, "failed_validation", error=issue_text)
+        if callback_id:
+            await admin.answer_callback(callback_id, "Новый story plan не прошел проверку.")
+        await notify_admin(admin, "Regenerated Dzen story plan failed", issue_text)
+        return
+
+    posts = [message.translated_text or "" for message in selected_messages]
     new_text, issues = await draft_dzen_article_with_validation(
         model,
         posts,
         settings,
         review_note=review_note,
-        article_date_label=dzen_article_date_label(settings, slot_key=article.slot_key),
+        article_date_label=date_label,
         article_channel=channel,
+        story_plan=story_plan,
         slot_key=article.slot_key,
     )
     if issues:
@@ -954,15 +1258,36 @@ async def handle_article_reject(
         await notify_admin(admin, "Regenerated Dzen article validation failed", "; ".join(issues))
         return
 
+    image = await select_dzen_article_image(
+        settings,
+        article=new_text,
+        messages=selected_messages,
+        channel=channel,
+        story_plan=story_plan,
+        dry_run=False,
+    )
+    if settings.dzen_article_image_required and not image:
+        db.update_article_status(article.id, "failed_image", error="Pexels image lookup returned no usable photo")
+        if callback_id:
+            await admin.answer_callback(callback_id, "Не удалось подобрать картинку Pexels.")
+        await notify_admin(admin, "Regenerated Dzen article image failed", f"article_id={article.id}")
+        return
+    new_text = append_image_credit_if_fits(new_text, settings, image)
+
     attempt = article.review_attempts + 1
     db.record_article(
         text=new_text,
         status="pending_review",
-        message_ids=[message.id for message in messages],
+        message_ids=selected_message_ids,
+        selected_message_ids=selected_message_ids,
         slot_key=article.slot_key,
         review_attempts=attempt,
         review_chat_id=chat_id,
         review_message_id=message_id,
+        image_url=image.url if image else None,
+        image_query=image.query if image else None,
+        image_credit=image.credit if image else None,
+        plan_json=plan_json,
     )
     await admin.edit_message_text(chat_id, message_id, f"Dzen-статья #{article_id} отклонена. Генерирую вариант #{attempt}.")
     result = await admin.send_article_review(
@@ -994,6 +1319,14 @@ def print_status(db: QueueDatabase, settings: Settings) -> None:
                 "max": bool(settings.dzen_article_footer_max_url),
             },
         },
+        "dzen_article_image": {
+            "enabled": settings.dzen_article_image_enabled,
+            "required": settings.dzen_article_image_required,
+            "pexels_ready": bool(settings.pexels_api_key),
+            "orientation": settings.pexels_photo_orientation,
+            "size": settings.pexels_photo_size,
+        },
+        "dzen_article_effective_max_chars": dzen_article_effective_max_chars(settings),
         "dzen_article_channels": [
             {
                 "key": channel.key,
@@ -1077,6 +1410,10 @@ def print_articles(db: QueueDatabase, limit: int) -> None:
                 "review_attempts": article.review_attempts,
                 "created_at": article.created_at,
                 "updated_at": article.updated_at,
+                "image_configured": bool(article.image_url),
+                "image_query": article.image_query,
+                "selected_message_ids": article.selected_message_ids_json,
+                "plan_json": article.plan_json,
                 "text_preview": text_preview[:500],
             }
         )
@@ -1163,18 +1500,23 @@ async def print_translation_prompt_preview(settings: Settings, source_text: str 
 
 def print_article_prompt_preview(db: QueueDatabase, settings: Settings, limit: int) -> None:
     messages = list(reversed(db.translated_posts_for_article(limit=limit, newest_first=True)))
-    posts = [message.translated_text or "" for message in messages]
-    if not posts:
+    candidates = story_candidates_from_messages(messages)
+    if not candidates:
         raise ValueError("No translated posts available for article prompt preview")
+    story_plan = fallback_story_plan(candidates)
+    selected_messages = selected_messages_for_plan(messages, story_plan)
+    posts = [message.translated_text or "" for message in selected_messages]
     print(
         json.dumps(
             {
                 "post_count": len(posts),
+                "story_plan": story_plan_to_json(story_plan),
                 "prompt": article_user_prompt(
                     posts,
-                    min_chars=settings.dzen_article_target_min_chars,
-                    max_chars=settings.dzen_article_target_max_chars,
+                    min_chars=min(settings.dzen_article_target_min_chars, dzen_article_effective_max_chars(settings)),
+                    max_chars=dzen_article_effective_max_chars(settings),
                     article_date_label=dzen_article_date_label(settings),
+                    story_plan=story_plan,
                 ),
             },
             ensure_ascii=False,

@@ -44,5 +44,10 @@ class ArticleRecord:
     review_attempts: int
     review_chat_id: str | None
     review_message_id: str | None
+    image_url: str | None
+    image_query: str | None
+    image_credit: str | None
+    plan_json: str | None
+    selected_message_ids_json: str | None
     created_at: str
     updated_at: str

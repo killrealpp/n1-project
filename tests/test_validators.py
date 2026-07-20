@@ -7,6 +7,7 @@ from n1_project.validators import (
     source_has_translatable_english,
     structure_issues,
     translation_issues,
+    trim_dzen_article_to_max_chars,
     unexpected_addition_issues,
     validate_dzen_bridge_article,
 )
@@ -145,6 +146,71 @@ def test_translation_issues_allow_h1_period_translation() -> None:
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_compact_russian_h1_period_translation() -> None:
+    source = (
+        "\U0001f1f7\U0001f1fa\U0001f4ca APRI sales in H1 2026 grew 48% YoY "
+        "to 72.62 thousand sq m - report"
+    )
+    output = (
+        "\U0001f1f7\U0001f1fa\U0001f4ca \u0412 1\u041f 2026 \u0433\u043e\u0434\u0430 "
+        "\u043e\u0431\u044a\u0435\u043c \u043f\u0440\u043e\u0434\u0430\u0436 "
+        "\u0437\u0430\u0441\u0442\u0440\u043e\u0439\u0449\u0438\u043a\u0430 APRI "
+        "\u0432\u044b\u0440\u043e\u0441 \u043d\u0430 48% \u0433/\u0433 - "
+        "\u0434\u043e 72.62 \u0442\u044b\u0441. \u043a\u0432. \u043c. - "
+        "\u043e\u0442\u0447\u0435\u0442"
+    )
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_compact_russian_q2_period_translation() -> None:
+    source = (
+        "\U0001f1f7\U0001f1fa\U0001f4c9 CHMF Severstal net profit under IFRS in H1 2026 "
+        "fell 89% to 4.12 bln rubles; EBITDA fell 46% to 42.34 bln rubles\n\n"
+        "Severstal EBITDA in Q2 fell 38% YoY to 24.4 bln rubles\n\n"
+        "Severstal in H1 increased steel output by 3% to 5.52 mln tons, "
+        "pig iron output rose 2% to 5.73 mln tons - report"
+    )
+    output = (
+        "\U0001f1f7\U0001f1fa\U0001f4c9 \u0427\u0438\u0441\u0442\u0430\u044f "
+        "\u043f\u0440\u0438\u0431\u044b\u043b\u044c \u0421\u0435\u0432\u0435\u0440\u0441\u0442\u0430\u043b\u0438 "
+        "\u043f\u043e \u041c\u0421\u0424\u041e \u0432 1\u041f 2026 "
+        "\u0433\u043e\u0434\u0430 \u0443\u043f\u0430\u043b\u0430 \u043d\u0430 89% - "
+        "\u0434\u043e 4,12 \u043c\u043b\u0440\u0434 \u0440\u0443\u0431; EBITDA "
+        "\u0441\u043d\u0438\u0437\u0438\u043b\u0430\u0441\u044c \u043d\u0430 46% "
+        "\u0434\u043e 42,34 \u043c\u043b\u0440\u0434 \u0440\u0443\u0431\n\n"
+        "EBITDA \u0421\u0435\u0432\u0435\u0440\u0441\u0442\u0430\u043b\u0438 \u0432\u043e "
+        "2\u041a \u0443\u043f\u0430\u043b\u0430 \u043d\u0430 38% \u0433/\u0433 "
+        "\u0434\u043e 24,4 \u043c\u043b\u0440\u0434 \u0440\u0443\u0431\n\n"
+        "\u0421\u0435\u0432\u0435\u0440\u0441\u0442\u0430\u043b\u044c \u0432 1\u041f "
+        "\u0443\u0432\u0435\u043b\u0438\u0447\u0438\u043b\u0430 \u0432\u044b\u043f\u0443\u0441\u043a "
+        "\u0441\u0442\u0430\u043b\u0438 \u043d\u0430 3% \u0434\u043e 5,52 "
+        "\u043c\u043b\u043d \u0442\u043e\u043d\u043d, \u0432\u044b\u043f\u0443\u0441\u043a "
+        "\u0447\u0443\u0433\u0443\u043d\u0430 \u0432\u044b\u0440\u043e\u0441 \u043d\u0430 "
+        "2% \u0434\u043e 5,73 \u043c\u043b\u043d \u0442\u043e\u043d\u043d - "
+        "\u043e\u0442\u0447\u0435\u0442"
+    )
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_allow_calendar_report_compact_h1_translation() -> None:
+    source = (
+        "\U0001f4ca\U0001f5d3 CALENDAR FOR TODAY - 2026.07.20\n\n"
+        "Known reports:\n"
+        "\U0001f1f7\U0001f1fa CHMF Severstal - IFRS H1 2026"
+    )
+    output = (
+        "\U0001f4ca\U0001f5d3 \u041a\u0410\u041b\u0415\u041d\u0414\u0410\u0420\u042c "
+        "\u041d\u0410 \u0421\u0415\u0413\u041e\u0414\u041d\u042f - 2026.07.20\n\n"
+        "\u0418\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0435 \u043e\u0442\u0447\u0435\u0442\u044b:\n"
+        "\U0001f1f7\U0001f1fa CHMF \u0421\u0435\u0432\u0435\u0440\u0441\u0442\u0430\u043b\u044c - "
+        "\u041c\u0421\u0424\u041e 1\u041f 2026"
+    )
+
+    assert translation_issues(source, output) == []
+
+
 def test_translation_issues_allow_h1_as_roman_half_year_translation() -> None:
     source = "Russia doubled coal exports to Brazil in H1 2026 - PRIME"
     output = (
@@ -272,6 +338,14 @@ def test_translation_issues_allow_stablecoin_fx_symbol_only_output_without_cyril
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_allow_index_table_without_cyrillic() -> None:
+    source = "\u26a0\ufe0f\U0001f1fa\U0001f1f8\n\nNASDAQ = -3%\nSOX = -5%"
+    output = "\u26a0\ufe0f\U0001f1fa\U0001f1f8\n\nNASDAQ = -3%\nSOX = -5%"
+
+    assert source_has_translatable_english(source) is False
+    assert translation_issues(source, output) == []
+
+
 def test_translation_issues_reject_added_chip_process_number() -> None:
     source = "Huawei plans to start its own DRAM memory chip production."
     output = "Huawei планирует запустить собственное производство DRAM по техпроцессу 28 нм."
@@ -302,6 +376,70 @@ def test_translation_issues_allow_double_pref_ticker_suffix_without_cyrillic() -
     assert translation_issues(source, output) == []
 
 
+def test_translation_issues_reject_literal_limit_up_translation() -> None:
+    source = "💥 🇷🇺 #EUTR = +40% = limit up"
+    output = "💥 🇷🇺 #EUTR = +40% = лимит вверх"
+
+    assert "bad market terminology: translate limit up as верхняя планка or планка роста" in translation_issues(
+        source,
+        output,
+    )
+
+
+def test_translation_issues_allow_russian_limit_up_slang() -> None:
+    source = "💥 🇷🇺 #EUTR = +40% = limit up"
+    output = "💥 🇷🇺 #EUTR = +40% = верхняя планка"
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_reject_circuit_breaker_as_fuse() -> None:
+    source = "🔥 🇷🇺 #EUTR = +82% = circuit breaker triggered"
+    output = "🔥 🇷🇺 #EUTR = +82% = сработал предохранитель (лимит роста)"
+
+    issues = translation_issues(source, output)
+
+    assert any("bad market terminology: translate circuit breaker/trading halt" in issue for issue in issues)
+
+
+def test_translation_issues_allow_trading_halt_wording() -> None:
+    source = "🔥 🇷🇺 #EUTR = +82% = circuit breaker triggered"
+    output = "🔥 🇷🇺 #EUTR = +82% = торги приостановлены после резкого роста"
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_reject_short_positions_as_korotkie() -> None:
+    source = "Short positions in SBER rose"
+    output = "Короткие позиции в SBER выросли"
+
+    assert "bad market terminology: translate short positions as шортовые позиции" in translation_issues(
+        source,
+        output,
+    )
+
+
+def test_translation_issues_allow_short_positions_slang() -> None:
+    source = "Short positions in SBER rose"
+    output = "Шортовые позиции в SBER выросли"
+
+    assert translation_issues(source, output) == []
+
+
+def test_translation_issues_reject_long_positions_as_dlinnye() -> None:
+    source = "Long positions in GAZP rose"
+    output = "Длинные позиции в GAZP выросли"
+
+    assert "bad market terminology: translate long positions as лонговые позиции" in translation_issues(source, output)
+
+
+def test_translation_issues_allow_long_positions_slang() -> None:
+    source = "Long positions in GAZP rose"
+    output = "Лонговые позиции в GAZP выросли"
+
+    assert translation_issues(source, output) == []
+
+
 def test_translation_issues_reject_untranslated_all_caps_news() -> None:
     source = "VTB NET PROFIT UNDER IFRS FELL 2.5X YEAR-ON-YEAR"
     output = "VTB NET PROFIT UNDER IFRS FELL 2.5X YEAR-ON-YEAR"
@@ -317,6 +455,22 @@ def test_structure_issues_detect_line_count_and_leading_emoji_changes() -> None:
 
     assert any("line count changed" in issue for issue in issues)
     assert "leading emoji sequence changed" in issues
+
+
+def test_trim_dzen_article_to_max_chars_preserves_title_and_removes_tail() -> None:
+    text = (
+        "Market title.\n\n"
+        "First body sentence stays. Second body sentence stays.\n\n"
+        "Final sentence should go. Another final sentence should go."
+    )
+    max_chars = len("Market title.\n\nFirst body sentence stays. Second body sentence stays.")
+
+    trimmed = trim_dzen_article_to_max_chars(text, max_chars=max_chars)
+
+    assert len(trimmed) <= max_chars
+    assert trimmed.startswith("Market title.\n\nFirst body sentence stays.")
+    assert "Another final sentence" not in trimmed
+    assert validate_dzen_bridge_article(trimmed, min_chars=1, max_chars=max_chars) == []
 
 
 def test_dzen_article_title_limit() -> None:

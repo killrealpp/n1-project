@@ -14,6 +14,7 @@ def build_publishers(settings: Settings, dry_run: bool = False) -> dict[str, Pub
             chat_id=settings.telegram_target_chat_id,
             max_chars=settings.telegram_max_text_chars,
             dry_run=dry_run,
+            caption_max_chars=settings.telegram_photo_caption_max_chars,
         ),
         "vk": VkPublisher(
             token=settings.vk_token,
@@ -37,5 +38,6 @@ def build_publishers(settings: Settings, dry_run: bool = False) -> dict[str, Pub
             max_chars=settings.dzen_post_max_text_chars,
             dry_run=dry_run,
             parse_mode=settings.dzen_article_parse_mode or None,
+            caption_max_chars=settings.telegram_photo_caption_max_chars,
         )
     return publishers

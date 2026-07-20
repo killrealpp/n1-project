@@ -17,12 +17,14 @@ class TelegramPublisher(Publisher):
         max_chars: int,
         dry_run: bool = False,
         parse_mode: str | None = None,
+        caption_max_chars: int = 1024,
     ):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.max_chars = max_chars
         self.dry_run = dry_run
         self.parse_mode = parse_mode
+        self.caption_max_chars = caption_max_chars
 
     async def publish_text(self, text: str) -> PublishResult:
         if not self.bot_token or not self.chat_id:
@@ -35,6 +37,26 @@ class TelegramPublisher(Publisher):
             return PublishResult(self.platform, True, destination_id="dry-run", payload=payload)
 
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(url, json=payload)
+            data = response.json()
+        if data.get("ok") and data.get("result", {}).get("message_id"):
+            return PublishResult(self.platform, True, destination_id=str(data["result"]["message_id"]))
+        return PublishResult(self.platform, False, error=str(data))
+
+    async def publish_photo(self, photo_url: str, caption: str) -> PublishResult:
+        if not self.bot_token or not self.chat_id:
+            return PublishResult(self.platform, False, error="missing Telegram bot token or chat id")
+        if not photo_url:
+            return PublishResult(self.platform, False, error="missing photo url")
+        ensure_max_chars(caption, self.caption_max_chars, f"{self.platform} photo caption")
+        payload = {"chat_id": self.chat_id, "photo": photo_url, "caption": caption}
+        if self.parse_mode:
+            payload["parse_mode"] = self.parse_mode
+        if self.dry_run:
+            return PublishResult(self.platform, True, destination_id="dry-run", payload=payload)
+
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendPhoto"
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(url, json=payload)
             data = response.json()

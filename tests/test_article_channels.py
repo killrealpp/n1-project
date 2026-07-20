@@ -49,11 +49,29 @@ def test_daily_article_schedule_creates_one_slot_per_channel(tmp_path: Path) -> 
 
     assert len(slots) == 3
     assert [slot.slot_key for slot in slots] == [
-        "2026-07-10 russia:daily",
-        "2026-07-10 energy:daily",
-        "2026-07-10 tech:daily",
+        "2026-07-10 russia:morning",
+        "2026-07-10 energy:morning",
+        "2026-07-10 tech:morning",
     ]
     assert [slot.publish_time for slot in slots] == ["10:30", "14:30", "18:30"]
+
+
+def test_markets_channel_creates_two_daily_visual_slots(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "DZEN_ARTICLE_CHANNELS": "markets",
+            "DZEN_ARTICLE_RANDOMIZE_TIMES": "false",
+        },
+        project_root=tmp_path,
+    )
+
+    slots = daily_article_schedule(settings, datetime(2026, 7, 10).date())
+
+    assert [slot.slot_key for slot in slots] == [
+        "2026-07-10 markets:morning",
+        "2026-07-10 markets:evening",
+    ]
+    assert [slot.publish_time for slot in slots] == ["11:30", "18:30"]
 
 
 def test_configured_article_channels_use_channel_bot_tokens(tmp_path: Path) -> None:
@@ -88,7 +106,7 @@ def test_due_article_slots_matches_randomized_time(tmp_path: Path) -> None:
     due = due_article_slots(settings, datetime(2026, 7, 10, 9, 22, tzinfo=ZoneInfo("Europe/Moscow")))
 
     assert len(due) == 1
-    assert due[0].slot_key == "2026-07-10 energy:daily"
+    assert due[0].slot_key == "2026-07-10 energy:morning"
 
 
 def test_filter_messages_for_channel_keeps_matching_topic() -> None:

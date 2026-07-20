@@ -9,6 +9,7 @@
 logs/
 data/
 models/
+assets/covers/
 .codex/
 .swarm/
 .claude/

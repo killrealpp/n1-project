@@ -24,6 +24,7 @@ class FakeTextModel(TextModel):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan=None,
     ) -> str:
         raise NotImplementedError
 
@@ -39,6 +40,7 @@ class FailingTextModel(TextModel):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan=None,
     ) -> str:
         raise NotImplementedError
 
@@ -57,6 +59,7 @@ class RepairingTextModel(TextModel):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan=None,
     ) -> str:
         raise NotImplementedError
 

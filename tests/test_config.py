@@ -47,6 +47,15 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
                 "DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS=4",
                 "DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS=3",
                 "DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS=true",
+                "DZEN_ARTICLE_IMAGE_ENABLED=true",
+                "DZEN_ARTICLE_IMAGE_REQUIRED=false",
+                "DZEN_ARTICLE_IMAGE_CREDIT_ENABLED=true",
+                "TELEGRAM_PHOTO_CAPTION_MAX_CHARS=1024",
+                "PEXELS_API_KEY=pexels-key",
+                "PEXELS_API_BASE_URL=https://api.pexels.com",
+                "PEXELS_PHOTO_ORIENTATION=landscape",
+                "PEXELS_PHOTO_SIZE=large",
+                "PEXELS_PHOTO_PER_PAGE=20",
                 "TRANSLATION_PROVIDER=openrouter",
                 "OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash",
                 "SOCIAL_POST_MAX_LINES=2",
@@ -102,6 +111,15 @@ def test_read_dotenv_and_settings(tmp_path: Path) -> None:
     assert settings.dzen_article_review_max_attempts == 4
     assert settings.dzen_article_review_timeout_hours == 3
     assert settings.dzen_article_auto_publish_weekends is True
+    assert settings.dzen_article_image_enabled is True
+    assert settings.dzen_article_image_required is False
+    assert settings.dzen_article_image_credit_enabled is True
+    assert settings.telegram_photo_caption_max_chars == 1024
+    assert settings.pexels_api_key == "pexels-key"
+    assert settings.pexels_api_base_url == "https://api.pexels.com"
+    assert settings.pexels_photo_orientation == "landscape"
+    assert settings.pexels_photo_size == "large"
+    assert settings.pexels_photo_per_page == 20
     assert settings.translation_provider == "openrouter"
     assert settings.openrouter_translation_model == "deepseek/deepseek-v4-flash"
     assert settings.max_ca_bundle == str(tmp_path / "certs" / "max.pem")
@@ -121,6 +139,25 @@ def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
     assert settings.translation_max_attempts == 5
     assert settings.admin_callback_poll_timeout_seconds == 25
     assert settings.dzen_article_review_enabled is False
+    assert settings.dzen_article_channels == ["markets"]
+    assert settings.dzen_article_min_posts == 1
+    assert settings.dzen_article_target_min_chars == 650
+    assert settings.dzen_article_target_max_chars == 950
+    assert settings.dzen_article_image_enabled is False
+    assert settings.telegram_photo_caption_max_chars == 1024
+
+
+def test_single_article_channel_uses_default_bridge_chat(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100main",
+            "DZEN_ARTICLE_CHANNELS": "markets",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.dzen_article_channels == ["markets"]
+    assert settings.dzen_article_bridge_chat_ids["markets"] == "-100main"
 
 
 def test_bundled_max_ca_bundle_is_used_by_default(tmp_path: Path) -> None:

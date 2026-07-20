@@ -14,30 +14,38 @@ if TYPE_CHECKING:
 
 
 DEFAULT_CHANNEL_WINDOWS = {
+    "markets": ["11:30-12:00", "18:30-19:00"],
     "russia": ["10:30-12:00"],
     "energy": ["14:30-16:00"],
     "tech": ["18:30-20:00"],
 }
 DEFAULT_CHANNEL_NAMES = {
+    "markets": "BAZAR MARKETS",
     "russia": "BAZAR RUSSIA",
     "energy": "BAZAR ENERGY",
     "tech": "BAZAR TECH",
 }
 DEFAULT_TOPIC_HINTS = {
+    "markets": (
+        "единый рыночный канал: российский рынок, рубль, ставка, облигации, дивиденды, "
+        "нефть, газ, сырье, ИИ, чипы, криптовалюты и крупные технокомпании. "
+        "Выбирай самый сильный связанный кластер, а не все темы сразу. "
+        "Не выбирай политические конфликты, санкции, войны и геополитическую эскалацию как главный сюжет"
+    ),
     "russia": (
         "российский рынок, рубль, ЦБ, IPO, дивиденды, buyback, облигации, "
         "российские компании, банки, ипотека и экономика для людей"
     ),
     "energy": (
-        "нефть, газ, СПГ, бензин, металлы, сырьевые прогнозы, Ормуз, "
-        "энергетика и геополитические риски, влияющие на цены"
+        "нефть, газ, СПГ, бензин, металлы, сырьевые прогнозы, добыча, запасы, спрос и цены. "
+        "Не делай Ормуз, Иран, санкции, войны или геополитическую эскалацию главным сюжетом"
     ),
     "tech": (
         "криптовалюты, BTC, ETH, DeFi, стейблкоины, ИИ, чипы, "
         "технологические компании и глобальные технорынки"
     ),
 }
-SLOT_LABELS = ("daily", "slot2", "slot3")
+SLOT_LABELS = ("morning", "evening", "slot3")
 TOPIC_PRIORITY = ("tech", "energy", "russia")
 
 
@@ -93,12 +101,12 @@ def configured_article_channels(settings: Settings) -> list[ArticleChannel]:
 def default_article_channel(settings: Settings) -> ArticleChannel:
     channels = configured_article_channels(settings)
     return channels[0] if channels else ArticleChannel(
-        key="russia",
-        name="BAZAR RUSSIA",
+        key="markets",
+        name="BAZAR MARKETS",
         bridge_chat_id=settings.dzen_telegram_bridge_chat_id,
-        bot_token=settings.dzen_article_bot_tokens.get("russia", settings.telegram_bot_token),
-        windows=tuple(DEFAULT_CHANNEL_WINDOWS["russia"]),
-        topic_hint=DEFAULT_TOPIC_HINTS["russia"],
+        bot_token=settings.dzen_article_bot_tokens.get("markets", settings.telegram_bot_token),
+        windows=tuple(DEFAULT_CHANNEL_WINDOWS["markets"]),
+        topic_hint=DEFAULT_TOPIC_HINTS["markets"],
     )
 
 

@@ -111,6 +111,15 @@ def settings_health(settings: Settings) -> dict[str, object]:
                 "max": bool(settings.dzen_article_footer_max_url),
             },
         },
+        "dzen_article_image": {
+            "enabled": settings.dzen_article_image_enabled,
+            "required": settings.dzen_article_image_required,
+            "pexels_ready": bool(settings.pexels_api_key),
+            "orientation": settings.pexels_photo_orientation,
+            "size": settings.pexels_photo_size,
+            "per_page": settings.pexels_photo_per_page,
+        },
+        "telegram_photo_caption_max_chars": settings.telegram_photo_caption_max_chars,
         "dzen_article_schedule_today": [
             {
                 "channel": slot.channel.key,

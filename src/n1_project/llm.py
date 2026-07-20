@@ -5,6 +5,13 @@ from abc import ABC, abstractmethod
 import httpx
 
 from n1_project.config import Settings
+from n1_project.story_plan import (
+    StoryCandidate,
+    StoryPlan,
+    fallback_story_plan,
+    story_plan_to_json,
+    story_planning_user_prompt,
+)
 
 
 OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -15,12 +22,10 @@ TRANSLATION_SYSTEM_PROMPT = (
 )
 
 ARTICLE_SYSTEM_PROMPT = (
-    "Ты - опытный финансовый журналист и редактор Дзена. "
-    "Пиши живые русские статьи из коротких Telegram-сигналов: не ленту новостей, "
-    "а понятную историю с причиной, следствием и ясным выводом. "
-    "Объясняй сложное простыми словами, как другу, который интересуется экономикой, "
-    "но не является профессионалом. Делай короткие абзацы, живые переходы и понятные подзаголовки. "
-    "Никогда не придумывай факты."
+    "Ты - опытный редактор рыночного Telegram/Dzen-канала. "
+    "Пиши короткие визуальные сводки к картинке: один сильный рыночный сюжет, ясный заголовок, "
+    "простое объяснение и осторожный вывод. "
+    "Не делай длинную статью, не пересказывай все новости подряд и никогда не придумывай факты."
 )
 
 
@@ -42,6 +47,9 @@ def translation_user_prompt(source_text: str) -> str:
         "- Do not add context, explanations, commentary, warnings, conclusions, titles, or disclaimers.\n"
         "- Do not invent sources. If the source has no attribution, the translation must have no attribution.\n"
         "- Do not make the text more promotional, emotional, or analytical than the source.\n"
+        "- Use Russian market slang that traders understand: translate `limit up` as `верхняя планка` or `планка роста`, not `лимит вверх`.\n"
+        "- Translate `circuit breaker`, `trading halt`, or `volatility halt` as `торги приостановлены`, `волатильностная пауза`, or `остановка торгов`, not as `предохранитель`.\n"
+        "- Translate `short positions` as `шортовые позиции` and `long positions` as `лонговые позиции`, not `короткие позиции` or `длинные позиции`.\n"
         "- Return only the translated post text and nothing else.\n\n"
         f"Source post:\n\n{source_text}"
     )
@@ -56,6 +64,8 @@ def translation_repair_user_prompt(source_text: str, translated_text: str, issue
         "- Preserve every number, date, ticker, hashtag, emoji, link, and source attribution exactly as present in the source.\n"
         "- Remove any number, source, attribution, hashtag, emoji, link, context, or explanation that is not in the source.\n"
         "- If the source contains no English words that need translation, return the source text unchanged.\n"
+        "- Use Russian market slang: `limit up` = `верхняя планка` or `планка роста`; `circuit breaker`/`trading halt` = `торги приостановлены`, `волатильностная пауза`, or `остановка торгов`; `short/long positions` = `шортовые/лонговые позиции`.\n"
+        "- Do not use `лимит вверх`, `предохранитель`, `короткие позиции`, or `длинные позиции` for these market terms.\n"
         "- Never return `None`, `null`, an empty response, or a placeholder.\n\n"
         f"Validation issues to fix:\n{'; '.join(issues)}\n\n"
         f"Source post:\n{source_text}\n\n"
@@ -69,33 +79,60 @@ def article_user_prompt(
     max_chars: int,
     review_note: str | None = None,
     article_date_label: str | None = None,
+    story_plan: StoryPlan | None = None,
 ) -> str:
     joined_posts = "\n\n---\n\n".join(posts)
     review_block = f"\nЗаметка редактора для этой правки:\n{review_note}\n\n" if review_note else ""
     date_context = article_date_label or "день публикации"
+    plan_block = ""
+    if story_plan:
+        selected_ids = ", ".join(str(message_id) for message_id in story_plan.selected_message_ids)
+        causal_chain = "\n".join(f"- {step}" for step in story_plan.causal_chain)
+        plan_block = (
+            "Редакторский план, которому нужно следовать:\n"
+            f"- mode: {story_plan.mode}\n"
+            f"- selected_message_ids: {selected_ids}\n"
+            f"- thesis: {story_plan.thesis}\n"
+            f"- connection: {story_plan.connection}\n"
+            f"- causal_chain:\n{causal_chain}\n"
+            f"- why_it_matters: {story_plan.why_it_matters}\n"
+            f"- what_changes_view: {story_plan.what_changes_view}\n"
+            f"- image_query: {story_plan.image_query}\n\n"
+        )
+    source_selection_rule = (
+        "- Используй только источники, выбранные в редакторском плане. Не добавляй невыбранные новости.\n"
+        if story_plan
+        else "- Считай исходные посты пулом кандидатов, а не обязательным чек-листом. Выбери один доказуемый сюжет.\n"
+    )
     return (
-        "Напиши одну статью для Дзена на русском языке из этих коротких рыночных Telegram-постов.\n\n"
+        "Напиши короткую визуальную сводку для Telegram/Dzen на русском языке из этих рыночных Telegram-постов.\n\n"
         f"{review_block}"
+        f"{plan_block}"
         "Жесткие правила:\n"
-        "- Верни только готовый текст статьи.\n"
-        "- Первая строка - заголовок Дзена. Он должен быть первым предложением, короче 140 символов и без ссылок.\n"
+        "- Верни только готовый caption, без пояснений и вариантов.\n"
+        "- Это подпись к посту с картинкой, а не длинная статья.\n"
+        "- Первая строка - заголовок. Он должен быть первым предложением, короче 120 символов, без ссылок и без вопросительного знака.\n"
         f"- Весь текст должен быть от {min_chars} до {max_chars} символов.\n"
-        "- Не используй Markdown. Для визуального ритма можно использовать только HTML-теги <b>...</b>.\n"
-        "- Первую строку-заголовок не оборачивай в <b>. Дальше сделай 2-4 коротких подзаголовка или ключевых акцента через <b>...</b>.\n"
-        "- Не ставь жирным целые длинные абзацы. Жирным должны быть короткие смысловые опоры: подзаголовок, вопрос, ключевой вывод.\n"
+        "- Целься в нижнюю половину диапазона, если фактов мало. Не добивай символы водой.\n"
+        "- Не используй Markdown. HTML-теги <b>...</b> можно использовать только для редкого акцента внутри текста.\n"
+        "- Первую строку-заголовок не оборачивай в <b>.\n"
         "- Каждый тег <b> обязательно закрывай тегом </b>. Не используй другие HTML-теги.\n"
+        "- Не используй одинаковые видимые метки `Что случилось`, `Почему важно`, `Что смотреть`.\n"
         "- Пиши на русском языке.\n"
         "- Сохраняй факты, имена, даты, числа, ссылки, тикеры, источники и смысл постов.\n"
         "- Не придумывай цитаты, статистику, причины, прогнозы, конфликт или контекст.\n"
         "- Не давай инвестиционных советов и не говори покупать, продавать, держать или шортить активы.\n"
-        f"- Контекст даты статьи: {date_context}. Упоминай дату только если это помогает тексту, не делай сухую отдельную строку `Сводка за ...`.\n"
-        "- Считай исходные посты пулом кандидатов, а не обязательным чек-листом.\n"
-        "- Выбери только посты, которые складываются в понятную тему; слабые и одиночные сигналы можно пропустить.\n"
-        "- Обычно сильная статья использует 4-8 связанных постов. Если материала мало, сделай статью короче и честнее.\n\n"
+        f"- Контекст даты публикации: {date_context}. Упоминай дату только если это помогает тексту.\n"
+        f"{source_selection_rule}"
+        "- Один пост = одна доказуемая мысль. Если план mode=single, не склеивай факт с чужими темами.\n"
+        "- Не пиши, что разные новости дают `один и тот же сигнал`, если в плане нет доказанной причинной цепочки.\n"
+        "- Не обещай в заголовке `цикл`, `разворот` или `сигнал рынку`, если causal_chain это не доказывает.\n\n"
+        "- Не строй сюжет вокруг политических конфликтов, войны, санкций, геополитической эскалации или военных рисков: такие материалы теряют монетизацию.\n"
+        "- Если политический конфликт есть в источниках, не делай его заголовком, главным тезисом или финальным выводом.\n\n"
         "Роль и стиль:\n"
-        "- Ты - опытный финансовый журналист и редактор Дзена.\n"
-        "- Пиши так, будто объясняешь сложную тему другу, который интересуется экономикой, но не является профессионалом.\n"
-        "- Цель - дочитываемость, вовлеченность и CTR через честный интерес, а не через обман.\n"
+        "- Ты - редактор рыночного Telegram-канала.\n"
+        "- Пиши просто и плотно: тезис, доказательство, значение, следующий ориентир.\n"
+        "- Цель - быстрый понятный пост, который хочется сохранить или переслать.\n"
         "- Никогда не пиши как Bloomberg, Reuters, РБК или официальный аналитический отчет.\n"
         "- Избегай канцелярита, бюрократического тона, тяжелых конструкций и ощущения, что текст написал ИИ.\n"
         "- Запрещенные фразы: `формируется противоречивая картина`, `усилилась геополитическая составляющая`, "
@@ -104,43 +141,29 @@ def article_user_prompt(
         "- Не повторяй подряд `при этом`, `одновременно`, `кроме того`, `в свою очередь`, `таким образом`.\n"
         "- Сложные термины вроде EIA, SPR, Brent, FOMC сразу объясняй простыми словами, если они есть в источниках.\n\n"
         "Заголовок:\n"
-        "- Не пересказывай новость. Создай честную интригу из конкретного факта.\n"
+        "- Не пересказывай все новости. Назови главный факт или напряжение.\n"
         "- Заголовок должен называть конкретного героя: компанию, страну, актив, рынок или событие из исходных постов.\n"
         "- Не начинай заголовок с `Почему`, `Что произошло`, `Что теперь будет` или `Что означает`.\n"
-        "- Крючок должен рождаться из конкретного напряжения, цифры или последствия, а не из одинаковой вопросительной формулы.\n"
-        "- Заголовок должен вызывать желание открыть статью, но не должен быть кликбейтом.\n"
-        "- Тело статьи обязано прямо ответить на вопрос или напряжение из заголовка.\n\n"
-        "Первый абзац:\n"
-        "- Первые 2-3 предложения после заголовка сразу объясняют: что произошло, почему это важно и зачем читать дальше.\n"
-        "- Не начинай статью словами `По данным`, `Согласно`, `Сегодня были опубликованы`.\n"
-        "- Первый абзац должен работать как описание карточки Дзена: понятно, конкретно, без разгона.\n\n"
-        "Основная часть:\n"
-        "- Не превращай статью в список новостей.\n"
-        "- Каждый следующий абзац должен логически продолжать предыдущий.\n"
-        "- Объясняй причинно-следственные связи: почему рынок реагирует, что это может изменить, что это значит для читателя или инвестора.\n"
-        "- Используй живые переходы, но не злоупотребляй ими: `Но дальше произошло самое интересное`, "
-        "`Однако есть один нюанс`, `Именно здесь возникает главный вопрос`, "
-        "`На этом проблемы не закончились`, `Но рынок обратил внимание совсем на другое`.\n"
-        "- Если посты не складываются в одну причинную историю, честно покажи их как несколько рыночных сигналов.\n"
-        "- Не раздувай один короткий сигнал в длинную статью.\n\n"
+        "- Если в источниках есть сильная цифра, актив или тикер, используй их в заголовке.\n"
+        "- Заголовок должен работать вместе с картинкой: конкретный, короткий, без тумана.\n\n"
+        "Содержание:\n"
+        "- Первый абзац после заголовка: главная мысль и основной факт из источников.\n"
+        "- Следующий абзац: доказательство через causal_chain, а не список новостей.\n"
+        "- Затем объясни значение для рынка или инвестора простым языком.\n"
+        "- Финал: что изменит картину или за чем следить дальше.\n"
+        "- Не превращай текст в список `новость 1 / новость 2 / вывод`.\n\n"
         "Ритм текста:\n"
         "- Пиши короткими предложениями. Средняя длина - 10-18 слов.\n"
         "- Если предложение тянется дольше двух строк, разбей его.\n"
-        "- Абзац - 1-3 предложения. Не делай абзацы длиннее 4 предложений.\n"
-        "- После каждых 2-3 абзацев добавляй короткий жирный подзаголовок через <b>...</b>, если он помогает читать.\n"
+        "- Абзац - 1-2 предложения.\n"
         "- Один абзац - одна мысль.\n"
-        "- Держи подлежащее, сказуемое и дополнение рядом, когда это звучит естественно по-русски.\n"
-        "- Ставь главный факт в начало предложения, а оговорки и контекст - после него.\n\n"
-        "Финал:\n"
-        "- Не заканчивай сухими фразами вроде `рынок остается чувствительным` или `ситуация продолжает развиваться`.\n"
-        "- Последний абзац отвечает: что теперь главное, что инвесторы будут отслеживать дальше и почему история еще не закончилась.\n"
-        "- Читатель должен уйти с ощущением, что понял ситуацию.\n\n"
+        "- Не используй длинные вводные и общие фразы вроде `на фоне неопределенности` без прямого факта.\n\n"
         "Проверка перед выдачей:\n"
-        "- Захочет ли человек открыть статью по этому заголовку?\n"
+        "- Можно ли понять пост за 15 секунд?\n"
         "- Понятно ли первое предложение без специальных знаний?\n"
         "- Нет ли ощущения, что текст написал ИИ?\n"
-        "- Можно ли читать статью без напряжения?\n"
-        "- Есть ли логичная история, а не набор фактов?\n"
+        "- Есть ли один главный сюжет, а не набор несвязанных фактов?\n"
+        "- Есть ли в тексте тезис, доказательство, значение и фактор, который изменит картину?\n"
         "- Каждый важный факт, число, тикер, источник и вывод должен быть в исходных постах.\n\n"
         f"Исходные посты:\n\n{joined_posts}"
     )
@@ -159,8 +182,20 @@ class TextModel(ABC):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan: StoryPlan | None = None,
     ) -> str:
         raise NotImplementedError
+
+    async def plan_dzen_story(
+        self,
+        candidates: list[StoryCandidate],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+        channel_note: str | None = None,
+    ) -> str:
+        return story_plan_to_json(fallback_story_plan(candidates))
 
     async def repair_translation(self, source_text: str, translated_text: str, issues: list[str]) -> str:
         return await self.translate_post(source_text)
@@ -196,6 +231,7 @@ class OllamaTextModel(TextModel):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan: StoryPlan | None = None,
     ) -> str:
         return await self._chat(
             model=self.settings.ollama_article_model,
@@ -206,8 +242,30 @@ class OllamaTextModel(TextModel):
                 max_chars,
                 review_note=review_note,
                 article_date_label=article_date_label,
+                story_plan=story_plan,
             ),
             temperature=0.35,
+        )
+
+    async def plan_dzen_story(
+        self,
+        candidates: list[StoryCandidate],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+        channel_note: str | None = None,
+    ) -> str:
+        return await self._chat(
+            model=self.settings.ollama_article_model,
+            system_prompt=ARTICLE_SYSTEM_PROMPT,
+            user_prompt=story_planning_user_prompt(
+                candidates,
+                review_note=review_note,
+                article_date_label=article_date_label,
+                channel_note=channel_note,
+            ),
+            temperature=0.2,
         )
 
     async def _chat(self, model: str, system_prompt: str, user_prompt: str, temperature: float) -> str:
@@ -253,6 +311,7 @@ class OpenRouterArticleModel(TextModel):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan: StoryPlan | None = None,
     ) -> str:
         if not self.settings.openrouter_api_key:
             raise RuntimeError("OPENROUTER_API_KEY is empty")
@@ -271,10 +330,43 @@ class OpenRouterArticleModel(TextModel):
                         max_chars,
                         review_note=review_note,
                         article_date_label=article_date_label,
+                        story_plan=story_plan,
                     ),
                 },
             ],
             "temperature": 0.35,
+        }
+        return await self._openrouter_chat(payload)
+
+    async def plan_dzen_story(
+        self,
+        candidates: list[StoryCandidate],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+        channel_note: str | None = None,
+    ) -> str:
+        if not self.settings.openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is empty")
+        if not self.settings.openrouter_article_model:
+            raise RuntimeError("OPENROUTER_ARTICLE_MODEL is empty")
+
+        payload = {
+            "model": self.settings.openrouter_article_model,
+            "messages": [
+                {"role": "system", "content": ARTICLE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": story_planning_user_prompt(
+                        candidates,
+                        review_note=review_note,
+                        article_date_label=article_date_label,
+                        channel_note=channel_note,
+                    ),
+                },
+            ],
+            "temperature": 0.2,
         }
         return await self._openrouter_chat(payload)
 
@@ -360,6 +452,7 @@ class OpenRouterTranslationModel(TextModel):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan: StoryPlan | None = None,
     ) -> str:
         return await self.article_model.write_dzen_article(
             posts,
@@ -367,6 +460,25 @@ class OpenRouterTranslationModel(TextModel):
             max_chars=max_chars,
             review_note=review_note,
             article_date_label=article_date_label,
+            story_plan=story_plan,
+        )
+
+    async def plan_dzen_story(
+        self,
+        candidates: list[StoryCandidate],
+        min_chars: int,
+        max_chars: int,
+        review_note: str | None = None,
+        article_date_label: str | None = None,
+        channel_note: str | None = None,
+    ) -> str:
+        return await self.article_model.plan_dzen_story(
+            candidates,
+            min_chars=min_chars,
+            max_chars=max_chars,
+            review_note=review_note,
+            article_date_label=article_date_label,
+            channel_note=channel_note,
         )
 
 
@@ -381,8 +493,17 @@ class DryRunTextModel(TextModel):
         max_chars: int,
         review_note: str | None = None,
         article_date_label: str | None = None,
+        story_plan: StoryPlan | None = None,
     ) -> str:
-        body = "\n\n".join(posts).strip()
+        if story_plan:
+            body = (
+                f"{story_plan.thesis}\n\n"
+                f"{story_plan.connection}\n\n"
+                f"{story_plan.why_it_matters}\n\n"
+                f"{story_plan.what_changes_view}"
+            )
+        else:
+            body = "\n\n".join(posts).strip()
         if not body:
             body = "No new posts for the digest."
         article = f"Dry-run Dzen article.\n\n{body}"

@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS articles (
   review_attempts INTEGER NOT NULL DEFAULT 0,
   review_chat_id TEXT,
   review_message_id TEXT,
+  image_url TEXT,
+  image_query TEXT,
+  image_credit TEXT,
+  plan_json TEXT,
+  selected_message_ids_json TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -100,6 +105,16 @@ class QueueDatabase:
             conn.execute("ALTER TABLE articles ADD COLUMN review_chat_id TEXT")
         if "review_message_id" not in columns:
             conn.execute("ALTER TABLE articles ADD COLUMN review_message_id TEXT")
+        if "image_url" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN image_url TEXT")
+        if "image_query" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN image_query TEXT")
+        if "image_credit" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN image_credit TEXT")
+        if "plan_json" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN plan_json TEXT")
+        if "selected_message_ids_json" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN selected_message_ids_json TEXT")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS service_state (
@@ -279,6 +294,8 @@ class QueueDatabase:
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
                        review_attempts, review_chat_id, review_message_id,
+                       image_url, image_query, image_credit,
+                       plan_json, selected_message_ids_json,
                        created_at, updated_at
                 FROM articles
                 WHERE slot_key = ?
@@ -294,6 +311,8 @@ class QueueDatabase:
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
                        review_attempts, review_chat_id, review_message_id,
+                       image_url, image_query, image_credit,
+                       plan_json, selected_message_ids_json,
                        created_at, updated_at
                 FROM articles
                 WHERE id = ?
@@ -309,6 +328,8 @@ class QueueDatabase:
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
                        review_attempts, review_chat_id, review_message_id,
+                       image_url, image_query, image_credit,
+                       plan_json, selected_message_ids_json,
                        created_at, updated_at
                 FROM articles
                 ORDER BY id DESC
@@ -329,6 +350,8 @@ class QueueDatabase:
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
                        review_attempts, review_chat_id, review_message_id,
+                       image_url, image_query, image_credit,
+                       plan_json, selected_message_ids_json,
                        created_at, updated_at
                 FROM articles
                 WHERE status = 'pending_review'
@@ -476,15 +499,25 @@ class QueueDatabase:
         review_attempts: int | None = None,
         review_chat_id: str | None = None,
         review_message_id: str | None = None,
+        image_url: str | None = None,
+        image_query: str | None = None,
+        image_credit: str | None = None,
+        plan_json: str | None = None,
+        selected_message_ids: Iterable[int] | None = None,
     ) -> int:
+        ids = list(message_ids)
+        selected_ids = list(selected_message_ids) if selected_message_ids is not None else ids
+        selected_message_ids_json = json.dumps(selected_ids, ensure_ascii=False) if selected_ids else None
         with self.connect() as conn:
             cur = conn.execute(
                 """
                 INSERT INTO articles (
                   slot_key, text, status, destination_id, error,
-                  review_attempts, review_chat_id, review_message_id
+                  review_attempts, review_chat_id, review_message_id,
+                  image_url, image_query, image_credit,
+                  plan_json, selected_message_ids_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(slot_key) WHERE slot_key IS NOT NULL DO UPDATE SET
                   text = excluded.text,
                   status = excluded.status,
@@ -493,6 +526,11 @@ class QueueDatabase:
                   review_attempts = excluded.review_attempts,
                   review_chat_id = COALESCE(excluded.review_chat_id, articles.review_chat_id),
                   review_message_id = COALESCE(excluded.review_message_id, articles.review_message_id),
+                  image_url = COALESCE(excluded.image_url, articles.image_url),
+                  image_query = COALESCE(excluded.image_query, articles.image_query),
+                  image_credit = COALESCE(excluded.image_credit, articles.image_credit),
+                  plan_json = excluded.plan_json,
+                  selected_message_ids_json = excluded.selected_message_ids_json,
                   updated_at = datetime('now')
                 """,
                 (
@@ -504,6 +542,11 @@ class QueueDatabase:
                     review_attempts if review_attempts is not None else 0,
                     review_chat_id,
                     review_message_id,
+                    image_url,
+                    image_query,
+                    image_credit,
+                    plan_json,
+                    selected_message_ids_json,
                 ),
             )
             if cur.lastrowid:
@@ -516,7 +559,6 @@ class QueueDatabase:
                 article_id = int(row["id"])
             else:
                 raise RuntimeError("Could not determine article id")
-            ids = list(message_ids)
             if ids:
                 placeholders = ",".join("?" for _ in ids)
                 conn.execute(
@@ -618,6 +660,11 @@ class QueueDatabase:
             review_attempts=int(row["review_attempts"]),
             review_chat_id=row["review_chat_id"],
             review_message_id=row["review_message_id"],
+            image_url=row["image_url"],
+            image_query=row["image_query"],
+            image_credit=row["image_credit"],
+            plan_json=row["plan_json"],
+            selected_message_ids_json=row["selected_message_ids_json"],
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )

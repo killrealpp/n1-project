@@ -151,6 +151,16 @@ class Settings:
     dzen_article_review_max_attempts: int
     dzen_article_review_timeout_hours: int
     dzen_article_auto_publish_weekends: bool
+    dzen_article_image_enabled: bool
+    dzen_article_image_required: bool
+    dzen_article_image_credit_enabled: bool
+    telegram_photo_caption_max_chars: int
+
+    pexels_api_key: str
+    pexels_api_base_url: str
+    pexels_photo_orientation: str
+    pexels_photo_size: str
+    pexels_photo_per_page: int
 
     llm_provider: str
     translation_provider: str
@@ -181,6 +191,9 @@ class Settings:
         if not db_path.is_absolute():
             db_path = root / db_path
 
+        dzen_article_channels = parse_csv(env.get("DZEN_ARTICLE_CHANNELS", "markets"))
+        if not dzen_article_channels:
+            dzen_article_channels = ["russia"]
         dzen_bridge_chat_id = env.get("DZEN_TELEGRAM_BRIDGE_CHAT_ID", "")
         dzen_article_bridge_chat_ids = parse_key_value_csv(env.get("DZEN_ARTICLE_BRIDGE_CHAT_IDS"))
         for key, env_key in (
@@ -192,6 +205,8 @@ class Settings:
                 dzen_article_bridge_chat_ids[key] = str(env[env_key])
         if dzen_bridge_chat_id and "russia" not in dzen_article_bridge_chat_ids:
             dzen_article_bridge_chat_ids["russia"] = dzen_bridge_chat_id
+        if dzen_bridge_chat_id and len(dzen_article_channels) == 1:
+            dzen_article_bridge_chat_ids.setdefault(dzen_article_channels[0], dzen_bridge_chat_id)
         dzen_article_bot_tokens = parse_key_value_csv(env.get("DZEN_ARTICLE_BOT_TOKENS"))
         for key, env_key in (
             ("russia", "DZEN_RUSSIA_TELEGRAM_BOT_TOKEN"),
@@ -228,7 +243,7 @@ class Settings:
             admin_notifications_enabled=parse_bool(env.get("ADMIN_NOTIFICATIONS_ENABLED"), True),
             admin_callback_poll_timeout_seconds=parse_int(env.get("ADMIN_CALLBACK_POLL_TIMEOUT_SECONDS"), 25),
             dzen_telegram_bridge_chat_id=dzen_bridge_chat_id,
-            dzen_article_channels=parse_csv(env.get("DZEN_ARTICLE_CHANNELS", "russia")),
+            dzen_article_channels=dzen_article_channels,
             dzen_article_bridge_chat_ids=dzen_article_bridge_chat_ids,
             dzen_article_bot_tokens=dzen_article_bot_tokens,
             dzen_article_windows=parse_channel_windows(env.get("DZEN_ARTICLE_WINDOWS")),
@@ -243,12 +258,21 @@ class Settings:
             dzen_article_footer_max_url=env.get("DZEN_ARTICLE_FOOTER_MAX_URL", "").strip(),
             dzen_daily_articles_enabled=parse_bool(env.get("DZEN_DAILY_ARTICLES_ENABLED")),
             dzen_daily_article_times=parse_csv(env.get("DZEN_DAILY_ARTICLE_TIMES")),
-            dzen_article_min_posts=parse_int(env.get("DZEN_ARTICLE_MIN_POSTS"), 4),
+            dzen_article_min_posts=parse_int(env.get("DZEN_ARTICLE_MIN_POSTS"), 1),
             dzen_article_candidate_limit=parse_int(env.get("DZEN_ARTICLE_CANDIDATE_LIMIT"), 10),
             dzen_article_review_enabled=parse_bool(env.get("DZEN_ARTICLE_REVIEW_ENABLED"), False),
             dzen_article_review_max_attempts=parse_int(env.get("DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS"), 5),
             dzen_article_review_timeout_hours=parse_int(env.get("DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS"), 3),
             dzen_article_auto_publish_weekends=parse_bool(env.get("DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS"), True),
+            dzen_article_image_enabled=parse_bool(env.get("DZEN_ARTICLE_IMAGE_ENABLED"), False),
+            dzen_article_image_required=parse_bool(env.get("DZEN_ARTICLE_IMAGE_REQUIRED"), False),
+            dzen_article_image_credit_enabled=parse_bool(env.get("DZEN_ARTICLE_IMAGE_CREDIT_ENABLED"), False),
+            telegram_photo_caption_max_chars=parse_int(env.get("TELEGRAM_PHOTO_CAPTION_MAX_CHARS"), 1024),
+            pexels_api_key=env.get("PEXELS_API_KEY", "").strip(),
+            pexels_api_base_url=env.get("PEXELS_API_BASE_URL", "https://api.pexels.com").rstrip("/"),
+            pexels_photo_orientation=env.get("PEXELS_PHOTO_ORIENTATION", "landscape").strip().lower(),
+            pexels_photo_size=env.get("PEXELS_PHOTO_SIZE", "large").strip().lower(),
+            pexels_photo_per_page=parse_int(env.get("PEXELS_PHOTO_PER_PAGE"), 12),
             llm_provider=env.get("LLM_PROVIDER", "openrouter").lower(),
             translation_provider=env.get("TRANSLATION_PROVIDER", env.get("LLM_PROVIDER", "openrouter")).lower(),
             ollama_base_url=env.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/"),
@@ -265,8 +289,8 @@ class Settings:
             vk_max_text_chars=parse_int(env.get("VK_MAX_TEXT_CHARS"), 16350),
             max_max_text_chars=parse_int(env.get("MAX_MAX_TEXT_CHARS"), 4000),
             dzen_post_max_text_chars=parse_int(env.get("DZEN_POST_MAX_TEXT_CHARS"), 4096),
-            dzen_article_target_min_chars=parse_int(env.get("DZEN_ARTICLE_TARGET_MIN_CHARS"), 1600),
-            dzen_article_target_max_chars=parse_int(env.get("DZEN_ARTICLE_TARGET_MAX_CHARS"), 2800),
+            dzen_article_target_min_chars=parse_int(env.get("DZEN_ARTICLE_TARGET_MIN_CHARS"), 650),
+            dzen_article_target_max_chars=parse_int(env.get("DZEN_ARTICLE_TARGET_MAX_CHARS"), 950),
             social_post_max_lines=parse_int(env.get("SOCIAL_POST_MAX_LINES"), 3),
             social_post_target_max_chars=parse_int(env.get("SOCIAL_POST_TARGET_MAX_CHARS"), 700),
             publish_order=parse_csv(env.get("PUBLISH_ORDER", "vk,telegram")),

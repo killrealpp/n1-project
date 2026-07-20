@@ -22,6 +22,7 @@ DATE_RE = re.compile(
     r"(?![\d.])"
 )
 PERIOD_NUMBER_RE = re.compile(r"\b[HQ]([1-4])\b", re.IGNORECASE)
+RU_COMPACT_PERIOD_RE = re.compile(r"(?<!\w)([1-4])\s*[\u041f\u043f\u041a\u043a](?!\w)")
 ALNUM_MODEL_NUMBER_RE = re.compile(r"\b[A-ZА-Я]{1,8}-?(\d{1,4})(?:[A-ZА-Яa-zа-я])?\b")
 LAYER_NUMBER_RE = re.compile(r"\b(?:L|Layer)[-\s]?([1-4])\b", re.IGNORECASE)
 RU_PERIOD_WORD_PATTERNS = {
@@ -71,12 +72,31 @@ LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
 BOLD_BLOCK_RE = re.compile(r"^\s*<b>[^<]{1,120}</b>\s*$", re.IGNORECASE)
 HTML_TAG_RE = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>")
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 EMOJI_RE = re.compile(r"[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF\u2600-\u27BF]")
 LEADING_EMOJI_RE = re.compile(r"^\s*((?:[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF\u2600-\u27BF]\ufe0f?\s*)+)")
 GENERIC_ARTICLE_TITLE_RE = re.compile(
     r"^\s*(?:почему|что\s+произошло|что\s+теперь\s+будет|что\s+означает)\b",
     re.IGNORECASE,
 )
+SOURCE_LIMIT_UP_RE = re.compile(r"\blimit[-\s]?up\b|\bupper\s+price\s+limit\b", re.IGNORECASE)
+OUTPUT_LIMIT_UP_GOOD_RE = re.compile(r"\b(?:верхн\w*\s+планк\w*|планк\w*\s+роста)\b", re.IGNORECASE)
+OUTPUT_LIMIT_UP_BAD_RE = re.compile(r"\bлимит\s+ввер\w*|\bлимит\s+роста\b|\bпредохранител\w*", re.IGNORECASE)
+SOURCE_TRADING_HALT_RE = re.compile(
+    r"\b(?:circuit\s+breaker|trading\s+halt|halted|volatility\s+halt|volatility\s+auction)\b",
+    re.IGNORECASE,
+)
+OUTPUT_TRADING_HALT_GOOD_RE = re.compile(
+    r"\b(?:торг\w*\s+приостанов\w*|приостанов\w*\s+торг\w*|волатильностн\w*\s+пауз\w*|остановк\w*\s+торг\w*|дискретн\w*\s+аукцион\w*)\b",
+    re.IGNORECASE,
+)
+OUTPUT_TRADING_HALT_BAD_RE = re.compile(r"\bпредохранител\w*", re.IGNORECASE)
+SOURCE_SHORT_POSITION_RE = re.compile(r"\b(?:short\s+positions?|shorts)\b", re.IGNORECASE)
+SOURCE_LONG_POSITION_RE = re.compile(r"\b(?:long\s+positions?|longs)\b", re.IGNORECASE)
+OUTPUT_SHORT_POSITION_BAD_RE = re.compile(r"\bкоротк\w*\s+позици\w*", re.IGNORECASE)
+OUTPUT_LONG_POSITION_BAD_RE = re.compile(r"\bдлинн\w*\s+позици\w*", re.IGNORECASE)
+OUTPUT_SHORT_POSITION_GOOD_RE = re.compile(r"\b(?:шортов\w*\s+позици\w*|шорт\w*)\b", re.IGNORECASE)
+OUTPUT_LONG_POSITION_GOOD_RE = re.compile(r"\b(?:лонгов\w*\s+позици\w*|лонг\w*)\b", re.IGNORECASE)
 KNOWN_ATTRIBUTIONS = {
     "AUTOSTAT",
     "BBG",
@@ -101,6 +121,22 @@ CURRENCY_CODES = {
     "JPY",
     "RUB",
     "USD",
+}
+MARKET_SYMBOL_WORDS = {
+    "CAC",
+    "DAX",
+    "DJIA",
+    "FTSE",
+    "HSI",
+    "IMOEX",
+    "MOEX",
+    "NASDAQ",
+    "NDX",
+    "NIKKEI",
+    "RTS",
+    "RTSI",
+    "SSEC",
+    "SPX",
 }
 
 
@@ -167,6 +203,7 @@ def extract_numbers(text: str) -> set[str]:
         numbers.add("24/7")
     numbers.update(NUMBER_RE.findall(number_text))
     numbers.update(PERIOD_NUMBER_RE.findall(number_text))
+    numbers.update(RU_COMPACT_PERIOD_RE.findall(number_text))
     numbers.update(ALNUM_MODEL_NUMBER_RE.findall(number_text))
     numbers.update(LAYER_NUMBER_RE.findall(number_text))
     normalized = text.lower()
@@ -403,6 +440,40 @@ def format_dzen_article_text(text: str, article_date_label: str | None = None) -
     return sanitize_article_html("\n\n".join(blocks))
 
 
+def trim_dzen_article_to_max_chars(text: str, max_chars: int) -> str:
+    article = text.strip()
+    if max_chars <= 0 or len(article) <= max_chars:
+        return article
+
+    title, rest = split_first_sentence(article)
+    if not title:
+        return article[:max_chars].rstrip()
+
+    blocks = [block.strip() for block in rest.split("\n\n") if block.strip()]
+    while blocks and len("\n\n".join([title, *blocks])) > max_chars:
+        last = blocks[-1]
+        sentences = SENTENCE_SPLIT_RE.split(last)
+        if len(sentences) > 1:
+            shortened = " ".join(sentences[:-1]).strip()
+            if shortened:
+                blocks[-1] = shortened
+            else:
+                blocks.pop()
+        else:
+            blocks.pop()
+        while blocks and BOLD_BLOCK_RE.fullmatch(blocks[-1]):
+            blocks.pop()
+
+    if blocks:
+        candidate = "\n\n".join([title, *blocks]).strip()
+        if len(candidate) <= max_chars:
+            return candidate
+
+    if len(title) <= max_chars:
+        return title
+    return title[:max_chars].rstrip()
+
+
 def article_html_issues(text: str) -> list[str]:
     issues: list[str] = []
     for match in HTML_TAG_RE.finditer(text):
@@ -445,6 +516,8 @@ def leftover_english_issue(output_text: str) -> str | None:
 
 
 def is_market_symbol_word(word: str) -> bool:
+    if word.upper() in MARKET_SYMBOL_WORDS:
+        return True
     if re.fullmatch(r"[A-Z]{2,5}[Pp]{1,2}", word):
         return True
     if not word.isupper():
@@ -487,10 +560,30 @@ def leftover_english_issue_for_translation(source_text: str, output_text: str) -
     return None
 
 
+def market_terminology_issues(source_text: str, output_text: str) -> list[str]:
+    issues: list[str] = []
+    if SOURCE_LIMIT_UP_RE.search(source_text):
+        if OUTPUT_LIMIT_UP_BAD_RE.search(output_text) or not OUTPUT_LIMIT_UP_GOOD_RE.search(output_text):
+            issues.append("bad market terminology: translate limit up as верхняя планка or планка роста")
+    if SOURCE_TRADING_HALT_RE.search(source_text):
+        if OUTPUT_TRADING_HALT_BAD_RE.search(output_text) or not OUTPUT_TRADING_HALT_GOOD_RE.search(output_text):
+            issues.append(
+                "bad market terminology: translate circuit breaker/trading halt as торги приостановлены, волатильностная пауза, остановка торгов, or дискретный аукцион"
+            )
+    if SOURCE_SHORT_POSITION_RE.search(source_text):
+        if OUTPUT_SHORT_POSITION_BAD_RE.search(output_text) or not OUTPUT_SHORT_POSITION_GOOD_RE.search(output_text):
+            issues.append("bad market terminology: translate short positions as шортовые позиции")
+    if SOURCE_LONG_POSITION_RE.search(source_text):
+        if OUTPUT_LONG_POSITION_BAD_RE.search(output_text) or not OUTPUT_LONG_POSITION_GOOD_RE.search(output_text):
+            issues.append("bad market terminology: translate long positions as лонговые позиции")
+    return issues
+
+
 def translation_issues(source_text: str, output_text: str) -> list[str]:
     issues = preservation_issues(source_text, output_text)
     issues.extend(structure_issues(source_text, output_text))
     issues.extend(unexpected_addition_issues(source_text, output_text))
+    issues.extend(market_terminology_issues(source_text, output_text))
     leftover = leftover_english_issue_for_translation(source_text, output_text)
     if leftover:
         issues.append(leftover)

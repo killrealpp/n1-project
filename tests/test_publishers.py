@@ -35,6 +35,21 @@ async def test_dzen_dry_run_payload_can_use_html_parse_mode() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dzen_photo_dry_run_payload_uses_caption_limit_and_html() -> None:
+    publisher = DzenBridgePublisher("token", "-100", 4096, dry_run=True, parse_mode="HTML", caption_max_chars=1024)
+
+    result = await publisher.publish_photo("https://images.pexels.com/photo.jpg", "Title.\n\n<b>Что случилось</b>")
+
+    assert result.ok is True
+    assert result.payload == {
+        "chat_id": "-100",
+        "photo": "https://images.pexels.com/photo.jpg",
+        "caption": "Title.\n\n<b>Что случилось</b>",
+        "parse_mode": "HTML",
+    }
+
+
+@pytest.mark.asyncio
 async def test_vk_dry_run_converts_owner_id() -> None:
     publisher = VkPublisher("token", "123", 16350, dry_run=True)
 

@@ -151,6 +151,51 @@ def test_article_review_links_messages_and_state(tmp_path: Path) -> None:
     assert db.get_state("admin_telegram_update_offset") == "123"
 
 
+def test_article_image_metadata_is_persisted(tmp_path: Path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+
+    article_id = db.record_article(
+        "caption",
+        "published",
+        slot_key="2026-07-10 markets:morning",
+        image_url="https://images.pexels.com/photos/1.jpg",
+        image_query="financial market chart",
+        image_credit="Фото: Pexels",
+    )
+
+    article = db.article_by_id(article_id)
+    assert article is not None
+    assert article.image_url == "https://images.pexels.com/photos/1.jpg"
+    assert article.image_query == "financial market chart"
+    assert article.image_credit == "Фото: Pexels"
+
+
+def test_article_story_plan_metadata_is_persisted(tmp_path: Path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    first_id, _ = db.upsert_source_post(SourcePost("-100", "1", "Rate cut"))
+    second_id, _ = db.upsert_source_post(SourcePost("-100", "2", "IPO"))
+    db.mark_translated(first_id, "ЦБ может снизить ставку")
+    db.mark_translated(second_id, "Компании готовятся к IPO")
+
+    plan_json = '{"mode":"cluster","selected_message_ids":[1,2]}'
+    article_id = db.record_article(
+        "caption",
+        "pending_review",
+        message_ids=[first_id, second_id],
+        selected_message_ids=[first_id, second_id],
+        slot_key="2026-07-20 markets:morning",
+        plan_json=plan_json,
+    )
+
+    article = db.article_by_id(article_id)
+
+    assert article is not None
+    assert article.plan_json == plan_json
+    assert article.selected_message_ids_json == f"[{first_id}, {second_id}]"
+
+
 def test_article_candidates_can_use_latest_unlinked_posts(tmp_path: Path) -> None:
     db = QueueDatabase(tmp_path / "queue.sqlite3")
     db.initialize()
@@ -209,6 +254,10 @@ def test_article_slot_migration_for_existing_db(tmp_path: Path) -> None:
 
     assert db.record_article("text", "published", slot_key="2026-07-03 19:00") == 1
     assert db.article_slot_status("2026-07-03 19:00") == "published"
+    article = db.article_for_slot("2026-07-03 19:00")
+    assert article is not None
+    assert article.plan_json is None
+    assert article.selected_message_ids_json is None
 
 
 def test_message_topic_migration_for_existing_db(tmp_path: Path) -> None:
