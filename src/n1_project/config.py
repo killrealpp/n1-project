@@ -216,6 +216,8 @@ class Settings:
             if env.get(env_key):
                 dzen_article_bot_tokens[key] = str(env[env_key])
 
+        dzen_article_image_enabled = parse_bool(env.get("DZEN_ARTICLE_IMAGE_ENABLED"), False)
+
         return cls(
             project_root=root,
             app_env=env.get("APP_ENV", "development"),
@@ -264,8 +266,8 @@ class Settings:
             dzen_article_review_max_attempts=parse_int(env.get("DZEN_ARTICLE_REVIEW_MAX_ATTEMPTS"), 5),
             dzen_article_review_timeout_hours=parse_int(env.get("DZEN_ARTICLE_REVIEW_TIMEOUT_HOURS"), 3),
             dzen_article_auto_publish_weekends=parse_bool(env.get("DZEN_ARTICLE_AUTO_PUBLISH_WEEKENDS"), True),
-            dzen_article_image_enabled=parse_bool(env.get("DZEN_ARTICLE_IMAGE_ENABLED"), False),
-            dzen_article_image_required=parse_bool(env.get("DZEN_ARTICLE_IMAGE_REQUIRED"), False),
+            dzen_article_image_enabled=dzen_article_image_enabled,
+            dzen_article_image_required=parse_bool(env.get("DZEN_ARTICLE_IMAGE_REQUIRED"), dzen_article_image_enabled),
             dzen_article_image_credit_enabled=parse_bool(env.get("DZEN_ARTICLE_IMAGE_CREDIT_ENABLED"), False),
             telegram_photo_caption_max_chars=parse_int(env.get("TELEGRAM_PHOTO_CAPTION_MAX_CHARS"), 1024),
             pexels_api_key=env.get("PEXELS_API_KEY", "").strip(),

@@ -144,7 +144,20 @@ def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
     assert settings.dzen_article_target_min_chars == 650
     assert settings.dzen_article_target_max_chars == 950
     assert settings.dzen_article_image_enabled is False
+    assert settings.dzen_article_image_required is False
     assert settings.telegram_photo_caption_max_chars == 1024
+
+
+def test_dzen_image_required_defaults_to_enabled_state(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "DZEN_ARTICLE_IMAGE_ENABLED": "true",
+        },
+        project_root=tmp_path,
+    )
+
+    assert settings.dzen_article_image_enabled is True
+    assert settings.dzen_article_image_required is True
 
 
 def test_single_article_channel_uses_default_bridge_chat(tmp_path: Path) -> None:

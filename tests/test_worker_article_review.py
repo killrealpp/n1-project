@@ -496,6 +496,44 @@ async def test_generate_dzen_article_publishes_pexels_photo_caption(tmp_path, mo
 
 
 @pytest.mark.asyncio
+async def test_generate_dzen_article_requires_image_when_visual_posts_are_enabled(tmp_path, monkeypatch) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_TARGET_MIN_CHARS": "50",
+            "DZEN_ARTICLE_TARGET_MAX_CHARS": "950",
+            "DZEN_ARTICLE_IMAGE_ENABLED": "true",
+        },
+        project_root=tmp_path,
+    )
+    assert settings.dzen_article_image_required is True
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    row_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "BTC ETF inflows rise"))
+    db.mark_translated(row_id, "Приток в BTC ETF растет")
+    fake_publisher = FakeDzenPublisher()
+    monkeypatch.setattr("n1_project.worker.build_publishers", lambda settings, dry_run=False: {"dzen": fake_publisher})
+
+    await generate_dzen_article(
+        db,
+        settings,
+        ArticleModel(),
+        AdminNotifier("token", "123456789", dry_run=True),
+        dry_run=False,
+        force=True,
+        slot_key="2026-07-06 markets:morning",
+    )
+
+    article = db.article_for_slot("2026-07-06 markets:morning")
+    assert article is not None
+    assert article.status == "failed_image"
+    assert "Pexels image lookup returned no usable photo" in (article.error or "")
+    assert fake_publisher.published_texts == []
+    assert fake_publisher.published_photos == []
+
+
+@pytest.mark.asyncio
 async def test_select_dzen_article_image_uses_story_plan_query(tmp_path) -> None:
     settings = Settings.from_mapping(
         {
