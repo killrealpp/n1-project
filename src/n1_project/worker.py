@@ -669,8 +669,30 @@ def dzen_publisher_for_channel(settings: Settings, channel: ArticleChannel, dry_
 
 async def publish_dzen_article_payload(publisher, article: str, image: ArticleImage | None):
     if image and hasattr(publisher, "publish_photo"):
+        logging.info(
+            "Dzen article publish payload method=photo chars=%s caption_max=%s image_query=%s",
+            len(article),
+            getattr(publisher, "caption_max_chars", "unknown"),
+            image.query,
+        )
         return await publisher.publish_photo(image.url, article)
+    if image:
+        logging.warning(
+            "Dzen publisher does not support photo payloads; falling back to text chars=%s image_query=%s",
+            len(article),
+            image.query,
+        )
+    logging.info("Dzen article publish payload method=text chars=%s image_available=%s", len(article), bool(image))
     return await publisher.publish_text(article)
+
+
+def dzen_photo_caption_error(article: str, settings: Settings, image: ArticleImage | None) -> str | None:
+    if not image:
+        return None
+    length = len(article)
+    if length <= settings.telegram_photo_caption_max_chars:
+        return None
+    return f"Dzen photo caption too long: {length} chars; max is {settings.telegram_photo_caption_max_chars}"
 
 
 async def publish_approved_dzen_article(
@@ -694,6 +716,19 @@ async def publish_approved_dzen_article(
             url=article.image_url,
             query=article.image_query or "",
         )
+    caption_error = dzen_photo_caption_error(article.text, settings, image)
+    if caption_error:
+        db.update_article_status(article.id, "failed_validation", error=caption_error)
+        await notify_admin(admin, "Dzen article caption too long", f"article_id={article.id}\n{caption_error}")
+        logging.error(
+            "Dzen article caption too long article_id=%s channel=%s chars=%s max=%s image_query=%s",
+            article.id,
+            channel.key,
+            len(article.text),
+            settings.telegram_photo_caption_max_chars,
+            image.query if image else None,
+        )
+        raise ValueError(caption_error)
     result = await publish_dzen_article_payload(publisher, article.text, image)
     if dry_run:
         print(
@@ -760,6 +795,7 @@ async def select_dzen_article_image(
     dry_run: bool,
 ) -> ArticleImage | None:
     if not settings.dzen_article_image_enabled:
+        logging.info("Dzen image selection skipped channel=%s reason=disabled", channel.key)
         return None
     provider = PexelsImageProvider(
         api_key=settings.pexels_api_key,
@@ -773,12 +809,20 @@ async def select_dzen_article_image(
         logging.warning("Dzen image publishing enabled, but PEXELS_API_KEY is empty")
         return None
     query = story_plan.image_query.strip() if story_plan and story_plan.image_query.strip() else ""
+    query_source = "story_plan" if query else "fallback"
     if not query:
         topic = dominant_article_topic(messages, article, channel)
         query = build_pexels_photo_query(
             [article, *(message.translated_text or message.source_text for message in messages)],
             topic=topic,
         )
+    logging.info(
+        "Dzen image lookup channel=%s query=%s source=%s dry_run=%s",
+        channel.key,
+        query,
+        query_source,
+        dry_run,
+    )
     try:
         image = await provider.search_photo(query)
     except Exception as exc:
@@ -787,6 +831,7 @@ async def select_dzen_article_image(
     if not image:
         logging.warning("Pexels image lookup returned no photos query=%s", query)
         return None
+    logging.info("Dzen image selected channel=%s query=%s source_url=%s", channel.key, image.query, image.source_url)
     return image
 
 
@@ -821,6 +866,32 @@ async def publish_generated_dzen_article(
     publisher = dzen_publisher_for_channel(settings, channel, dry_run=dry_run)
     if not publisher:
         raise ValueError(f"Dzen bridge is not configured for {channel.key}")
+    caption_error = dzen_photo_caption_error(article, settings, image)
+    if caption_error:
+        if dry_run:
+            raise ValueError(caption_error)
+        article_id = db.record_article(
+            text=article,
+            status="failed_validation",
+            error=caption_error,
+            message_ids=[],
+            selected_message_ids=list(story_plan.selected_message_ids) if story_plan else message_ids,
+            slot_key=slot_key,
+            image_url=image.url if image else None,
+            image_query=image.query if image else None,
+            image_credit=image.credit if image else None,
+            plan_json=story_plan_to_json(story_plan) if story_plan else None,
+        )
+        await notify_admin(admin, "Dzen article caption too long", f"article_id={article_id}\nchannel={channel.key}\n{caption_error}")
+        logging.error(
+            "Dzen article caption too long article_id=%s channel=%s chars=%s max=%s image_query=%s",
+            article_id,
+            channel.key,
+            len(article),
+            settings.telegram_photo_caption_max_chars,
+            image.query if image else None,
+        )
+        return article_id
     result = await publish_dzen_article_payload(publisher, article, image)
     if dry_run:
         print(

@@ -20,6 +20,7 @@ from n1_project.worker import (
     manual_article_channels,
     print_articles,
     process_timed_out_article_reviews,
+    publish_generated_dzen_article,
     select_dzen_article_image,
     should_auto_publish_dzen_article,
 )
@@ -493,6 +494,43 @@ async def test_generate_dzen_article_publishes_pexels_photo_caption(tmp_path, mo
     assert fake_publisher.published_texts == []
     assert fake_publisher.published_photos[0][0] == "https://images.pexels.com/photos/btc.jpg"
     assert "Фото: Jane Doe / Pexels" in fake_publisher.published_photos[0][1]
+
+
+@pytest.mark.asyncio
+async def test_publish_generated_dzen_article_rejects_overlong_photo_caption(tmp_path, monkeypatch) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TELEGRAM_BOT_TOKEN": "token",
+            "DZEN_TELEGRAM_BRIDGE_CHAT_ID": "-100dzen",
+            "DZEN_ARTICLE_IMAGE_ENABLED": "true",
+            "TELEGRAM_PHOTO_CAPTION_MAX_CHARS": "1024",
+        },
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    fake_publisher = FakeDzenPublisher()
+    monkeypatch.setattr("n1_project.worker.build_publishers", lambda settings, dry_run=False: {"dzen": fake_publisher})
+    image = ArticleImage(url="https://images.pexels.com/photos/market.jpg", query="financial market chart")
+
+    await publish_generated_dzen_article(
+        db,
+        settings,
+        AdminNotifier("token", "123456789", dry_run=True),
+        "A" * 1025,
+        message_ids=[1],
+        dry_run=False,
+        slot_key="2026-07-06 markets:morning",
+        image=image,
+    )
+
+    article = db.article_for_slot("2026-07-06 markets:morning")
+    assert article is not None
+    assert article.status == "failed_validation"
+    assert article.image_url == "https://images.pexels.com/photos/market.jpg"
+    assert "Dzen photo caption too long: 1025 chars; max is 1024" in (article.error or "")
+    assert fake_publisher.published_texts == []
+    assert fake_publisher.published_photos == []
 
 
 @pytest.mark.asyncio
