@@ -279,3 +279,31 @@ Rewrote `docs/server-deploy.md` for the actual VDS workflow: run as `root` from 
 ## [2026-07-13] fix | Automatic MAX CA bundle
 
 MAX publishing still failed on the server with `CERTIFICATE_VERIFY_FAILED` when `MAX_CA_BUNDLE` was not explicitly set. The settings loader now automatically uses the bundled `certs/russian_trusted_ca_bundle.pem` when it exists, while still allowing `MAX_CA_BUNDLE` to override the path. `--doctor` now reports the bundled path as configured by default, and tests cover the fallback.
+
+## [2026-07-21] fix | Require Dzen images when visual posts are enabled
+
+After a Dzen visual article was delivered without a photo, changed image handling so `DZEN_ARTICLE_IMAGE_REQUIRED` defaults to the enabled state of `DZEN_ARTICLE_IMAGE_ENABLED`. Visual Dzen posts now fail with `failed_image` instead of silently publishing as text when Pexels is unavailable, unless the operator explicitly sets `DZEN_ARTICLE_IMAGE_REQUIRED=false`.
+
+## [2026-07-21] config | Temporarily disable Dzen article footer links
+
+Disabled the cross-platform Dzen article footer by setting `DZEN_ARTICLE_FOOTER_ENABLED=false`. The Telegram/VK/MAX URLs remain in `.env` for quick rollback, but visual caption articles no longer spend caption space on the `Где ещё следить` block.
+
+## [2026-07-28] research | Reddit as an optional publishing platform
+
+Assessed Reddit for the Russian market-news publishing pipeline. Current official Reddit guidance makes direct automated cross-posting risky: API data access requires explicit approval, automated accounts should be registered and labeled as apps, automated posting must avoid spam and substantially similar posts across subreddits, and community rules/moderator expectations are central. Technical posting is feasible through OAuth and `/api/submit`, but Reddit should not be added as a blocking core platform in the VK/MAX/Telegram chain. Recommended product shape is either an owned subreddit/profile or low-frequency human-curated daily/weekly discussion digests with per-subreddit approval, separate retry policy, strong throttling, and no promotional link footer by default.
+
+## [2026-07-28] design | Reddit editorial format
+
+Refined the Reddit direction: posts should publish from the user's own profile, not into third-party subreddits by default. Reddit copy must be lighter than Dzen and less formal than translated Telegram posts: short title, 3-6 simple sentences, one clear market angle, optional direct question, and topic hashtags such as `#markets`, `#energy`, `#crypto`, `#ai`, and `#chips`. Reddit generation should be topic-gated: if a theme does not have enough strong source material, skip that slot instead of forcing filler.
+
+## [2026-07-28] scaffolding | Reddit cadence and file structure
+
+Added the Reddit planning scaffold: `docs/reddit-publishing-plan.md`, `wiki/reddit-publishing.md`, `prompts/reddit-post-prompt.md`, `raw/2026-07-28-reddit-research.md`, and `src/n1_project/reddit/policy.py`. The initial cadence is 6 possible Moscow-time windows per day with a hard cap of 12, controlled hashtags, topic caps, and a skip-first quality gate. Reddit remains outside `PUBLISH_ORDER` until the real publisher and draft review flow are deliberately implemented.
+
+## [2026-07-28] design | Reddit timing jitter
+
+Changed Reddit timing from fixed minutes to publication windows with stable daily jitter. The first six windows are `09:10-10:20`, `11:30-12:50`, `14:00-15:20`, `16:30-17:50`, `19:00-20:20`, and `21:30-22:50` Moscow time. The scheduler should choose a different exact minute across dates while keeping the chosen minute stable after restarts on the same day.
+
+## [2026-08-04] ops | Systemd worker runner
+
+Switched server operation guidance from `screen` to persistent `systemd` service management after an accidental `n1-monitor` screen session was created on the VDS. Updated `deploy/n1-worker.service.example` for the actual `/root/n1-project` layout and removed the obsolete `ollama.service` dependency. The live worker should run as `n1-worker.service` via `systemctl enable --now n1-worker`, with logs inspected through `journalctl -u n1-worker`.

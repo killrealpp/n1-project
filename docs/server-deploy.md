@@ -1,149 +1,123 @@
-# Server Screen Runbook
+# Server Systemd Runbook
 
 This is the production runbook for the current VDS layout:
 
 - user: `root`;
 - project directory: `~/n1-project`;
-- runner: `screen`;
-- no `sudo`;
-- no `systemctl`;
-- worker screen name: `n1-worker`.
+- runner: `systemd`;
+- service name: `n1-worker.service`;
+- no `screen` for the main worker.
 
 Use this guide when updating or restarting the live worker.
 
-## 1. Connect And Inspect
+## 1. Remove Accidental Screen Sessions
 
-SSH into the server, then check the current layout:
+If a temporary screen session was created by mistake, stop it first:
 
-    cd ~
-    ls
-    cd ~/n1-project
-    screen -ls
-    git status --short
+```bash
+screen -S n1-monitor -X quit
+screen -ls
+```
 
-Expected project directory:
+It is okay if `screen -ls` says `No Sockets found`.
 
-    ~/n1-project
+## 2. Connect And Inspect
 
-Expected long-running worker session:
-
-    n1-worker
+```bash
+cd ~/n1-project
+git status --short
+systemctl status n1-worker --no-pager
+```
 
 If `git status --short` shows unexpected local edits on the server, stop and inspect them before pulling. Do not overwrite server-only files.
 
-## 2. Stop The Current Worker
+## 3. Stop The Current Worker
 
-Preferred safe stop:
+```bash
+systemctl stop n1-worker
+systemctl status n1-worker --no-pager
+```
 
-    cd ~/n1-project
-    screen -r n1-worker
+If the service does not exist yet, `systemctl` will say the unit was not found. That is fine during first setup.
 
-Inside the screen session:
+## 4. Make A Quick Backup
 
-    Ctrl+C
-    exit
+```bash
+cd ~/n1-project
+TS=$(date +%F-%H%M)
+mkdir -p ~/n1_backups/$TS
+cp .env ~/n1_backups/$TS/.env
+test -f data/n1_project.sqlite3 && cp data/n1_project.sqlite3 ~/n1_backups/$TS/n1_project.sqlite3
+```
 
-If the screen session is detached and you deliberately want to kill it from outside:
+Do not print `.env` values in chat.
 
-    screen -S n1-worker -X quit
+## 5. Pull New Code
 
-Confirm it stopped:
-
-    screen -ls
-
-It is okay if `screen -ls` still shows other sessions, for example `parser`.
-
-## 3. Make A Quick Backup
-
-Create a timestamped backup directory:
-
-    cd ~/n1-project
-    mkdir -p ~/n1_backups/$(date +%F-%H%M)
-
-Back up the env file:
-
-    cp .env ~/n1_backups/$(date +%F-%H%M)/.env
-
-Back up the SQLite database if it exists:
-
-    test -f data/n1_project.sqlite3 && cp data/n1_project.sqlite3 ~/n1_backups/$(date +%F-%H%M)/n1_project.sqlite3
-
-You can also use one reusable timestamp:
-
-    TS=$(date +%F-%H%M)
-    mkdir -p ~/n1_backups/$TS
-    cp .env ~/n1_backups/$TS/.env
-    test -f data/n1_project.sqlite3 && cp data/n1_project.sqlite3 ~/n1_backups/$TS/n1_project.sqlite3
-
-## 4. Pull New Code
-
-From the project directory:
-
-    cd ~/n1-project
-    git status --short
-    git pull --ff-only
+```bash
+cd ~/n1-project
+git status --short
+git pull --ff-only
+```
 
 If `git pull --ff-only` refuses to pull, do not force it. Check what changed:
 
-    git status --short
-    git diff --stat
+```bash
+git status --short
+git diff --stat
+```
 
-Then decide whether those server changes are intentional.
+## 6. Refresh Python Package
 
-## 5. Refresh Python Package
+```bash
+cd ~/n1-project
+.venv/bin/python -m pip install -e .
+```
 
-Use the existing virtualenv:
+If dependencies changed and the install complains:
 
-    cd ~/n1-project
-    .venv/bin/python -m pip install -e .
+```bash
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e .
+```
 
-If dependencies changed and the install complains, upgrade pip once:
-
-    .venv/bin/python -m pip install --upgrade pip
-    .venv/bin/python -m pip install -e .
-
-## 6. Update `.env`
+## 7. Update `.env`
 
 Open env:
 
-    cd ~/n1-project
-    nano .env
+```bash
+cd ~/n1-project
+nano .env
+```
 
-For the new article mode, these lines should be set:
+Recommended article settings:
 
-    DZEN_DAILY_ARTICLES_ENABLED=true
-    DZEN_ARTICLE_CHANNELS=russia,energy,tech
-    DZEN_ARTICLE_WINDOWS=russia=10:30-12:00;energy=14:30-16:00;tech=18:30-20:00
-    DZEN_ARTICLE_RANDOMIZE_TIMES=true
-    DZEN_ARTICLE_SLOT_WINDOW_MINUTES=5
-    DZEN_ARTICLE_MIN_POSTS=4
-    DZEN_ARTICLE_CANDIDATE_LIMIT=30
-    DZEN_ARTICLE_TARGET_MIN_CHARS=1600
-    DZEN_ARTICLE_TARGET_MAX_CHARS=2800
-    DZEN_ARTICLE_REVIEW_ENABLED=false
-    DZEN_ARTICLE_FOOTER_ENABLED=true
-    DZEN_ARTICLE_FOOTER_POLICY=always
-    DZEN_ARTICLE_FOOTER_ROTATE=true
+```bash
+DZEN_DAILY_ARTICLES_ENABLED=true
+DZEN_ARTICLE_CHANNELS=russia,energy,tech
+DZEN_ARTICLE_WINDOWS=russia=10:30-12:00;energy=14:30-16:00;tech=18:30-20:00
+DZEN_ARTICLE_RANDOMIZE_TIMES=true
+DZEN_ARTICLE_SLOT_WINDOW_MINUTES=5
+DZEN_ARTICLE_MIN_POSTS=4
+DZEN_ARTICLE_CANDIDATE_LIMIT=30
+DZEN_ARTICLE_TARGET_MIN_CHARS=1600
+DZEN_ARTICLE_TARGET_MAX_CHARS=2800
+DZEN_ARTICLE_REVIEW_ENABLED=false
+```
 
-Check that the three bridge channels and bot tokens are still filled:
+Check non-secret article settings:
 
-    DZEN_RUSSIA_TELEGRAM_BRIDGE_CHAT_ID=...
-    DZEN_ENERGY_TELEGRAM_BRIDGE_CHAT_ID=...
-    DZEN_ENERGY_TELEGRAM_BOT_TOKEN=...
-    DZEN_TECH_TELEGRAM_BRIDGE_CHAT_ID=...
-    DZEN_TECH_TELEGRAM_BOT_TOKEN=...
+```bash
+grep -n "DZEN_ARTICLE_WINDOWS\|DZEN_ARTICLE_MIN_POSTS\|DZEN_ARTICLE_TARGET_MIN_CHARS\|DZEN_ARTICLE_TARGET_MAX_CHARS\|DZEN_ARTICLE_REVIEW_ENABLED" .env
+```
 
-Do not print token values in chat. If you only want to verify safe non-secret article settings:
+## 8. Run Checks
 
-    grep -n "DZEN_ARTICLE_WINDOWS\|DZEN_ARTICLE_MIN_POSTS\|DZEN_ARTICLE_TARGET_MIN_CHARS\|DZEN_ARTICLE_TARGET_MAX_CHARS\|DZEN_ARTICLE_FOOTER_POLICY\|DZEN_ARTICLE_REVIEW_ENABLED" .env
-
-## 7. Run Checks
-
-Run these before starting the screen worker:
-
-    cd ~/n1-project
-    .venv/bin/python -m compileall -q src tests scripts
-    .venv/bin/python -m n1_project.worker --doctor
+```bash
+cd ~/n1-project
+.venv/bin/python -m compileall -q src tests scripts
+.venv/bin/python -m n1_project.worker --doctor
+```
 
 Good `--doctor` signs:
 
@@ -152,188 +126,155 @@ Good `--doctor` signs:
 - `max_ready=true`;
 - `dzen_bridge_ready=true`;
 - `dzen_article_publish_channels_ready=3`;
-- `dzen_article_channel_specific_bots_ready=2`;
-- `dzen_article_review_enabled=false`;
-- `dzen_article_footer.policy=always`;
-- `dzen_article_min_posts=4`;
-- schedule has exactly 3 article slots:
-  - `russia:daily`;
-  - `energy:daily`;
-  - `tech:daily`.
+- `dzen_article_review_enabled=false`.
 
 Optional full tests:
 
-    .venv/bin/python -m pytest -q
+```bash
+.venv/bin/python -m pytest -q
+```
 
 If the server is weak, `compileall` plus `--doctor` is the minimum before restart.
 
-## 8. Inspect Queue Before Start
+## 9. Install Or Update The Systemd Service
 
-Status:
+Create the service:
 
-    .venv/bin/python -m n1_project.worker --status
+```bash
+cat >/etc/systemd/system/n1-worker.service <<'EOF'
+[Unit]
+Description=N1 Telegram publishing worker
+After=network-online.target
+Wants=network-online.target
 
-Recent messages:
+[Service]
+Type=simple
+WorkingDirectory=/root/n1-project
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/root/n1-project/.venv/bin/python -m n1_project.worker --loop --source-mode mtproto
+Restart=always
+RestartSec=15
 
-    .venv/bin/python -m n1_project.worker --list-messages --limit 10
+[Install]
+WantedBy=multi-user.target
+EOF
+```
 
-Failed translations:
+Load and start it:
 
-    .venv/bin/python -m n1_project.worker --list-failed-translations --limit 20
+```bash
+systemctl daemon-reload
+systemctl enable --now n1-worker
+systemctl status n1-worker --no-pager
+```
 
-Recent Dzen articles:
+## 10. Watch Logs
 
-    .venv/bin/python -m n1_project.worker --list-articles --limit 10
+```bash
+journalctl -u n1-worker -f
+```
 
-If old translation failures were caused by validator bugs that are now fixed, reset them:
+Recent logs without following:
 
-    .venv/bin/python -m n1_project.worker --reset-failed
-
-## 9. Safe One-Shot Checks
-
-Ingest only, no publishing:
-
-    .venv/bin/python -m n1_project.worker --once --fetch-latest --limit 3 --ingest-only
-
-Translate/publish retry pass without fetching new source posts:
-
-    .venv/bin/python -m n1_project.worker --once --source-mode none --limit 10
-
-Use that second command only when you are ready for real publishing, because it can publish pending translated rows.
-
-Manual article dry-run for one channel:
-
-    .venv/bin/python -m n1_project.worker --once --article --force-article --article-channel energy --dry-run
-
-Real manual article publication:
-
-    .venv/bin/python -m n1_project.worker --once --article --force-article --article-channel energy
-
-Normally you do not need manual article publication; the loop handles daily slots.
-
-## 10. Start Worker In `screen`
-
-Create a logs directory:
-
-    cd ~/n1-project
-    mkdir -p logs
-
-Start detached:
-
-    screen -dmS n1-worker bash -lc 'cd ~/n1-project && .venv/bin/python -m n1_project.worker --loop --source-mode mtproto 2>&1 | tee -a logs/n1-worker.log'
-
-Check the session:
-
-    screen -ls
-
-Attach and watch:
-
-    screen -r n1-worker
-
-Detach without stopping:
-
-    Ctrl+A
-    D
-
-Tail logs without attaching:
-
-    cd ~/n1-project
-    tail -f logs/n1-worker.log
+```bash
+journalctl -u n1-worker -n 100 --no-pager
+```
 
 ## 11. Normal Restart
 
 Use this sequence for future deploys:
 
-    cd ~/n1-project
-    screen -S n1-worker -X quit
-    TS=$(date +%F-%H%M)
-    mkdir -p ~/n1_backups/$TS
-    cp .env ~/n1_backups/$TS/.env
-    test -f data/n1_project.sqlite3 && cp data/n1_project.sqlite3 ~/n1_backups/$TS/n1_project.sqlite3
-    git pull --ff-only
-    .venv/bin/python -m pip install -e .
-    .venv/bin/python -m compileall -q src tests scripts
-    .venv/bin/python -m n1_project.worker --doctor
-    mkdir -p logs
-    screen -dmS n1-worker bash -lc 'cd ~/n1-project && .venv/bin/python -m n1_project.worker --loop --source-mode mtproto 2>&1 | tee -a logs/n1-worker.log'
-    screen -ls
+```bash
+cd ~/n1-project
+systemctl stop n1-worker
+TS=$(date +%F-%H%M)
+mkdir -p ~/n1_backups/$TS
+cp .env ~/n1_backups/$TS/.env
+test -f data/n1_project.sqlite3 && cp data/n1_project.sqlite3 ~/n1_backups/$TS/n1_project.sqlite3
+git pull --ff-only
+.venv/bin/python -m pip install -e .
+.venv/bin/python -m compileall -q src tests scripts
+.venv/bin/python -m n1_project.worker --doctor
+systemctl daemon-reload
+systemctl restart n1-worker
+systemctl status n1-worker --no-pager
+```
 
-## 12. What The Worker Does Now
+## 12. Emergency Commands
+
+Stop worker:
+
+```bash
+systemctl stop n1-worker
+```
+
+Start worker:
+
+```bash
+systemctl start n1-worker
+```
+
+Restart worker:
+
+```bash
+systemctl restart n1-worker
+```
+
+Disable autostart:
+
+```bash
+systemctl disable n1-worker
+```
+
+Check health manually:
+
+```bash
+cd ~/n1-project
+.venv/bin/python -m n1_project.worker --doctor
+```
+
+Check queue:
+
+```bash
+.venv/bin/python -m n1_project.worker --status
+```
+
+List failed translations:
+
+```bash
+.venv/bin/python -m n1_project.worker --list-failed-translations --limit 20
+```
+
+Reset failed rows after a fix:
+
+```bash
+.venv/bin/python -m n1_project.worker --reset-failed
+```
+
+## 13. What The Worker Does
 
 Short posts:
 
 - reads source posts through MTProto;
 - translates through OpenRouter;
 - validates preservation of numbers, tickers, emojis, sources, dates, and structure;
-- publishes in order: `vk`, `max`, `telegram`;
+- publishes in order from `PUBLISH_ORDER`;
 - if a platform fails, stops that row and retries later without duplicating already successful platforms.
 
 Dzen/channel articles:
 
-- generates 3 articles per day total;
-- one article per channel:
-  - `russia` in `10:30-12:00`;
-  - `energy` in `14:30-16:00`;
-  - `tech` in `18:30-20:00`;
-- chooses a stable random minute inside each window;
+- generates one article per configured channel per day;
+- chooses a stable random minute inside each configured window;
 - uses only unused translated posts;
-- requires at least 4 matching posts unless manually forced;
-- publishes directly, no approve button, because `DZEN_ARTICLE_REVIEW_ENABLED=false`;
-- adds the Telegram/VK/MAX footer to each daily article.
-
-## 13. Emergency Commands
-
-Stop worker:
-
-    screen -S n1-worker -X quit
-
-See all screens:
-
-    screen -ls
-
-Attach:
-
-    screen -r n1-worker
-
-Check health:
-
-    cd ~/n1-project
-    .venv/bin/python -m n1_project.worker --doctor
-
-Check queue:
-
-    .venv/bin/python -m n1_project.worker --status
-
-List failed translations:
-
-    .venv/bin/python -m n1_project.worker --list-failed-translations --limit 20
-
-Reset failed rows after a fix:
-
-    .venv/bin/python -m n1_project.worker --reset-failed
-
-Restart cleanly:
-
-    cd ~/n1-project
-    screen -S n1-worker -X quit
-    screen -dmS n1-worker bash -lc 'cd ~/n1-project && .venv/bin/python -m n1_project.worker --loop --source-mode mtproto 2>&1 | tee -a logs/n1-worker.log'
-    screen -ls
+- publishes directly when `DZEN_ARTICLE_REVIEW_ENABLED=false`.
 
 ## 14. MAX TLS Note
 
-If MAX fails with:
+If MAX fails with `CERTIFICATE_VERIFY_FAILED`, check that the bundled certificate file exists:
 
-    CERTIFICATE_VERIFY_FAILED
-
-Check that the bundled certificate file exists:
-
-    cd ~/n1-project
-    ls -l certs/russian_trusted_ca_bundle.pem
+```bash
+cd ~/n1-project
+ls -l certs/russian_trusted_ca_bundle.pem
+```
 
 Current code uses this bundled file automatically when it exists. `--doctor` should show a non-empty `max_ca_bundle` and `max_ca_bundle_configured=true`.
-
-If you need to override it manually, set this in `.env`:
-
-    MAX_CA_BUNDLE=certs/russian_trusted_ca_bundle.pem
-
-Restart the worker through `screen`.

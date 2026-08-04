@@ -10,6 +10,7 @@ This vault is the project memory for the Telegram-to-Russian publishing automati
 - [[wiki/dzen-article-playbook]] - how to write bridge-safe Dzen articles.
 - [[wiki/llm-strategy]] - OpenRouter production LLM path and legacy local fallback notes.
 - [[wiki/mtproto-session-plan]] - how to create and move a dedicated Telegram session.
+- [[wiki/reddit-publishing]] - planned Reddit profile publishing stream, cadence, tags, and quality gate.
 - [[wiki/source-channel-style]] - observed style of `@num1_ch` and how to adapt it.
 
 ## Prompts
@@ -17,6 +18,7 @@ This vault is the project memory for the Telegram-to-Russian publishing automati
 - [[prompts/translation-prompt]] - strict English-to-Russian Telegram translation.
 - [[prompts/dzen-article-prompt]] - daily Dzen article generation.
 - [[prompts/humanize-russian-prompt]] - make model output sound natural without adding facts.
+- [[prompts/reddit-post-prompt]] - light Reddit profile post generation with skip rules.
 
 ## Raw Sources
 
@@ -26,6 +28,7 @@ This vault is the project memory for the Telegram-to-Russian publishing automati
 - [[raw/2026-07-06-dmitriev-dzen-method]] - researched Dmitriev Dzen navigation post, linked tutorials, headline models, posting time, and AI workflow notes.
 - [[raw/2026-07-06-human-writing-openrouter]] - OpenRouter/GPT and dependency-grammar/plain-language writing notes for Dzen articles.
 - [[raw/2026-07-08-dzen-human-article-prompt]] - user-supplied prompt for more human, story-driven Dzen financial articles.
+- [[raw/2026-07-28-reddit-research]] - official Reddit API, spam, automation, and product-fit notes.
 
 ## Operating Files
 

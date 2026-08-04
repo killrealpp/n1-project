@@ -1,17 +1,15 @@
 [Unit]
 Description=N1 Telegram publishing worker
-After=network-online.target ollama.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=n1
-Group=n1
-WorkingDirectory=/opt/n1_project
+WorkingDirectory=/root/n1-project
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/n1_project/.venv/bin/python -m n1_project.worker --loop --source-mode mtproto
+ExecStart=/root/n1-project/.venv/bin/python -m n1_project.worker --loop --source-mode mtproto
 Restart=always
-RestartSec=10
+RestartSec=15
 
 [Install]
 WantedBy=multi-user.target

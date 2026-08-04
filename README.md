@@ -21,7 +21,7 @@ Automation for reading English Telegram posts, translating them into Russian, pu
 
 - `.env.example` - configuration contract without real secrets.
 - `docs/runbook.md` - local operation guide.
-- `docs/server-deploy.md` - current root/screen server deployment commands, without `sudo` or `systemctl`.
+- `docs/server-deploy.md` - current root/systemd server deployment commands.
 - `docs/dzen-article-playbook.md` - Dzen article rules.
 - `docs/EXECPLAN.md` - living implementation plan.
 

@@ -121,7 +121,7 @@ For production after MTProto is configured:
 
     python -m n1_project.worker --loop --source-mode mtproto
 
-On the current server, production is started through `screen` as `root`, not through `systemctl`. Use `docs/server-deploy.md` for the exact no-`sudo` restart/update sequence.
+On the current server, production is started through `systemd` as `root`. Use `docs/server-deploy.md` for the exact `systemctl` restart/update sequence.
 
 The loop uses `WORKER_POLL_SECONDS` and `WORKER_BATCH_LIMIT` from `.env`. Dzen/channel articles are generated only when `DZEN_DAILY_ARTICLES_ENABLED=true`.
 

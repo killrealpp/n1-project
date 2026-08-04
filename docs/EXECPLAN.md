@@ -69,6 +69,8 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-13) Reduced article cadence to one daily article per channel, shortened target length to 1600-2800 characters, switched footer policy to every daily article, and added validation/repair guards for noisy translation failures.
 - [x] (2026-07-13) Rewrote server deployment instructions for the actual root + `screen` workflow, without `sudo` or `systemctl`.
 - [x] (2026-07-13) Made MAX TLS use the bundled Russian trusted CA bundle automatically when `MAX_CA_BUNDLE` is not explicitly set.
+- [x] (2026-07-28) Added a Reddit profile-publishing plan, prompt, wiki page, raw research note, and initial cadence/tag policy scaffold.
+- [x] (2026-08-04) Switched server operation guidance back to `systemd` for persistent production running under `n1-worker.service`.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -191,6 +193,10 @@ The user wants one automation system that reads new English posts from a source 
 - Decision: Cap automatic translation retries per row with `TRANSLATION_MAX_ATTEMPTS`, while keeping row-specific manual translation and reset commands available.
   Rationale: strict validation is useful, but endless retries for deterministic validation failures create noisy logs and repeated admin alerts without making progress.
   Date/Author: 2026-07-07 / Codex.
+
+- Decision: Treat Reddit as a separate profile-based editorial stream, not as another blocking platform in `PUBLISH_ORDER`.
+  Rationale: Reddit is better suited to short human market notes than high-frequency mirrored Telegram reposts. Posting should start at 6 possible daily windows with stable daily jitter, skip weak topics, use controlled hashtags, and only grow toward 8-12 posts per day after quality is proven.
+  Date/Author: 2026-07-28 / Codex.
 
 - Decision: Dzen articles should read like human financial journalism, not like a dry market digest with a mandatory date-frame line.
   Rationale: the user clarified that article retention and CTR need a stronger story shape: honest intrigue in the headline, an opening that immediately explains what happened and why it matters, simple cause-and-effect explanations, short paragraphs, and no bureaucratic style.
@@ -556,3 +562,5 @@ Revision note 2026-07-13 / Codex: updated after reducing article cadence to one 
 Revision note 2026-07-13 / Codex: updated after replacing the server deployment guide with root/screen-only operating instructions for the current VDS.
 
 Revision note 2026-07-13 / Codex: updated after making MAX CA bundle detection automatic to stop `CERTIFICATE_VERIFY_FAILED` publish retries on servers where `.env` lacks `MAX_CA_BUNDLE`.
+
+Revision note 2026-08-04 / Codex: updated after switching the VDS production runner from accidental/manual `screen` usage to persistent `systemd` service management.
