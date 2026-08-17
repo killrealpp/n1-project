@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 from abc import ABC, abstractmethod
+from typing import Awaitable, Callable
 
 import httpx
 
@@ -15,6 +19,155 @@ from n1_project.story_plan import (
 
 
 OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+OPENROUTER_RETRYABLE_STATUS_CODES = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+OPENROUTER_FATAL_REASONS = {
+    400: "запрос отклонен OpenRouter",
+    401: "неверный OPENROUTER_API_KEY",
+    402: "нет оплаты на счете OpenRouter",
+    403: "нет доступа к модели",
+    404: "модель не найдена в каталоге OpenRouter",
+}
+OPENROUTER_MAX_RETRY_DELAY_SECONDS = 60.0
+OPENROUTER_BODY_PREVIEW_CHARS = 500
+
+
+class OpenRouterError(RuntimeError):
+    """An OpenRouter call that failed with a readable reason and response body."""
+
+    def __init__(self, message: str, *, status_code: int | None = None, body: str | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body
+
+
+def truncate_response_body(text: str, limit: int = OPENROUTER_BODY_PREVIEW_CHARS) -> str:
+    body = " ".join(text.split())
+    if len(body) > limit:
+        return body[:limit] + "..."
+    return body
+
+
+def describe_openrouter_failure(status_code: int, model: str, body: str) -> str:
+    reason = OPENROUTER_FATAL_REASONS.get(status_code)
+    prefix = f"OpenRouter {status_code} для модели {model}"
+    if reason:
+        prefix = f"{prefix}: {reason}"
+    return f"{prefix}. Ответ: {body}" if body else prefix
+
+
+def retry_after_seconds(response: httpx.Response) -> float | None:
+    raw = response.headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw.strip()))
+    except ValueError:
+        # Retry-After may also be an HTTP date; fall back to the normal backoff.
+        return None
+
+
+def parse_openrouter_content(response: httpx.Response, model: str) -> str:
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise OpenRouterError(
+            f"OpenRouter вернул не-JSON ответ для модели {model}. Ответ: {truncate_response_body(response.text)}",
+            status_code=response.status_code,
+            body=truncate_response_body(response.text),
+        ) from exc
+
+    error = data.get("error") if isinstance(data, dict) else None
+    if error and not data.get("choices"):
+        body = truncate_response_body(json.dumps(error, ensure_ascii=False))
+        raise OpenRouterError(
+            f"OpenRouter вернул ошибку в теле ответа для модели {model}. Ответ: {body}",
+            status_code=response.status_code,
+            body=body,
+        )
+
+    try:
+        return str(data["choices"][0]["message"]["content"]).strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        body = truncate_response_body(json.dumps(data, ensure_ascii=False))
+        raise OpenRouterError(
+            f"Неожиданная структура ответа OpenRouter для модели {model}. Ответ: {body}",
+            status_code=response.status_code,
+            body=body,
+        ) from exc
+
+
+async def openrouter_chat_completion(
+    payload: dict[str, object],
+    api_key: str,
+    *,
+    timeout: float = 120.0,
+    max_attempts: int = 4,
+    retry_base_seconds: float = 2.0,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
+) -> str:
+    """Call OpenRouter chat completions with readable errors and bounded retries.
+
+    Rate limits, transport errors and server-side failures are retried with an
+    exponential backoff that honours Retry-After. Authentication, billing and
+    unknown-model failures are permanent, so they raise immediately instead of
+    burning the retry budget.
+    """
+    if not api_key:
+        raise OpenRouterError("OPENROUTER_API_KEY is empty")
+
+    wait = sleep or asyncio.sleep
+    model = str(payload.get("model") or "")
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    attempts = max(1, max_attempts)
+
+    for attempt in range(1, attempts + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(OPENROUTER_CHAT_COMPLETIONS_URL, json=payload, headers=headers)
+        except httpx.RequestError as exc:
+            if attempt >= attempts:
+                raise OpenRouterError(
+                    f"OpenRouter недоступен для модели {model} после {attempts} попыток: {type(exc).__name__}: {exc}"
+                ) from exc
+            delay = min(retry_base_seconds * (2 ** (attempt - 1)), OPENROUTER_MAX_RETRY_DELAY_SECONDS)
+            logging.warning(
+                "OpenRouter transport error model=%s attempt=%s/%s retry_in=%.1fs error=%r",
+                model,
+                attempt,
+                attempts,
+                delay,
+                exc,
+            )
+            await wait(delay)
+            continue
+
+        if response.status_code < 400:
+            return parse_openrouter_content(response, model)
+
+        body = truncate_response_body(response.text)
+        if response.status_code in OPENROUTER_RETRYABLE_STATUS_CODES and attempt < attempts:
+            delay = retry_after_seconds(response)
+            if delay is None:
+                delay = retry_base_seconds * (2 ** (attempt - 1))
+            delay = min(delay, OPENROUTER_MAX_RETRY_DELAY_SECONDS)
+            logging.warning(
+                "OpenRouter %s model=%s attempt=%s/%s retry_in=%.1fs body=%s",
+                response.status_code,
+                model,
+                attempt,
+                attempts,
+                delay,
+                body,
+            )
+            await wait(delay)
+            continue
+
+        message = describe_openrouter_failure(response.status_code, model, body)
+        logging.error("OpenRouter call failed: %s", message)
+        raise OpenRouterError(message, status_code=response.status_code, body=body)
+
+    raise OpenRouterError(f"OpenRouter не вернул ответ для модели {model} после {attempts} попыток")
 
 TRANSLATION_SYSTEM_PROMPT = (
     "You are a strict English-to-Russian translator. "
@@ -371,18 +524,13 @@ class OpenRouterArticleModel(TextModel):
         return await self._openrouter_chat(payload)
 
     async def _openrouter_chat(self, payload: dict[str, object]) -> str:
-        headers = {
-            "Authorization": f"Bearer {self.settings.openrouter_api_key}",
-            "Content-Type": "application/json",
-        }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(OPENROUTER_CHAT_COMPLETIONS_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        try:
-            return str(data["choices"][0]["message"]["content"]).strip()
-        except (KeyError, IndexError) as exc:
-            raise RuntimeError(f"Unexpected OpenRouter response keys: {sorted(data.keys())}") from exc
+        return await openrouter_chat_completion(
+            payload,
+            self.settings.openrouter_api_key,
+            timeout=self.timeout,
+            max_attempts=self.settings.openrouter_max_attempts,
+            retry_base_seconds=self.settings.openrouter_retry_base_seconds,
+        )
 
 
 class OpenRouterTranslationModel(TextModel):
@@ -405,18 +553,7 @@ class OpenRouterTranslationModel(TextModel):
             ],
             "temperature": 0.0,
         }
-        headers = {
-            "Authorization": f"Bearer {self.settings.openrouter_api_key}",
-            "Content-Type": "application/json",
-        }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(OPENROUTER_CHAT_COMPLETIONS_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        try:
-            return str(data["choices"][0]["message"]["content"]).strip()
-        except (KeyError, IndexError) as exc:
-            raise RuntimeError(f"Unexpected OpenRouter response keys: {sorted(data.keys())}") from exc
+        return await self._openrouter_chat(payload)
 
     async def repair_translation(self, source_text: str, translated_text: str, issues: list[str]) -> str:
         if not self.settings.openrouter_api_key:
@@ -432,18 +569,16 @@ class OpenRouterTranslationModel(TextModel):
             ],
             "temperature": 0.0,
         }
-        headers = {
-            "Authorization": f"Bearer {self.settings.openrouter_api_key}",
-            "Content-Type": "application/json",
-        }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(OPENROUTER_CHAT_COMPLETIONS_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-        try:
-            return str(data["choices"][0]["message"]["content"]).strip()
-        except (KeyError, IndexError) as exc:
-            raise RuntimeError(f"Unexpected OpenRouter response keys: {sorted(data.keys())}") from exc
+        return await self._openrouter_chat(payload)
+
+    async def _openrouter_chat(self, payload: dict[str, object]) -> str:
+        return await openrouter_chat_completion(
+            payload,
+            self.settings.openrouter_api_key,
+            timeout=self.timeout,
+            max_attempts=self.settings.openrouter_max_attempts,
+            retry_base_seconds=self.settings.openrouter_retry_base_seconds,
+        )
 
     async def write_dzen_article(
         self,

@@ -39,6 +39,12 @@ def parse_int(value: str | None, default: int = 0) -> int:
     return int(value.strip())
 
 
+def parse_float(value: str | None, default: float = 0.0) -> float:
+    if value is None or value.strip() == "":
+        return default
+    return float(value.strip())
+
+
 def parse_csv(value: str | None) -> list[str]:
     if not value:
         return []
@@ -173,6 +179,8 @@ class Settings:
     openrouter_api_key: str
     openrouter_translation_model: str
     openrouter_article_model: str
+    openrouter_max_attempts: int
+    openrouter_retry_base_seconds: float
 
     telegram_max_text_chars: int
     vk_max_text_chars: int
@@ -293,6 +301,8 @@ class Settings:
                 env.get("OPENROUTER_ARTICLE_MODEL", "deepseek/deepseek-v4-flash"),
             ),
             openrouter_article_model=env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-5.6-terra"),
+            openrouter_max_attempts=parse_int(env.get("OPENROUTER_MAX_ATTEMPTS"), 4),
+            openrouter_retry_base_seconds=parse_float(env.get("OPENROUTER_RETRY_BASE_SECONDS"), 2.0),
             telegram_max_text_chars=parse_int(env.get("TELEGRAM_MAX_TEXT_CHARS"), 4096),
             vk_max_text_chars=parse_int(env.get("VK_MAX_TEXT_CHARS"), 16350),
             max_max_text_chars=parse_int(env.get("MAX_MAX_TEXT_CHARS"), 4000),
