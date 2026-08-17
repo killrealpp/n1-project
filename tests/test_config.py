@@ -135,7 +135,7 @@ def test_openrouter_is_default_llm_path(tmp_path: Path) -> None:
     assert settings.translation_provider == "openrouter"
     assert settings.article_llm_provider == "openrouter"
     assert settings.openrouter_translation_model == "deepseek/deepseek-v4-flash"
-    assert settings.openrouter_article_model == "openai/gpt-5.3-chat"
+    assert settings.openrouter_article_model == "openai/gpt-5.6-terra"
     assert settings.translation_max_attempts == 5
     assert settings.admin_callback_poll_timeout_seconds == 25
     assert settings.dzen_article_review_enabled is False

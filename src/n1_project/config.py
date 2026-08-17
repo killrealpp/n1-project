@@ -286,7 +286,7 @@ class Settings:
                 "OPENROUTER_TRANSLATION_MODEL",
                 env.get("OPENROUTER_ARTICLE_MODEL", "deepseek/deepseek-v4-flash"),
             ),
-            openrouter_article_model=env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-5.3-chat"),
+            openrouter_article_model=env.get("OPENROUTER_ARTICLE_MODEL", "openai/gpt-5.6-terra"),
             telegram_max_text_chars=parse_int(env.get("TELEGRAM_MAX_TEXT_CHARS"), 4096),
             vk_max_text_chars=parse_int(env.get("VK_MAX_TEXT_CHARS"), 16350),
             max_max_text_chars=parse_int(env.get("MAX_MAX_TEXT_CHARS"), 4000),

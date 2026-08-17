@@ -9,7 +9,7 @@ Use OpenRouter for all production LLM work:
 - short-post translation: `TRANSLATION_PROVIDER=openrouter`;
 - Dzen article generation: `ARTICLE_LLM_PROVIDER=openrouter`;
 - translation model: `OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash`;
-- article model: `OPENROUTER_ARTICLE_MODEL=openai/gpt-5.3-chat`.
+- article model: `OPENROUTER_ARTICLE_MODEL=openai/gpt-5.6-terra`.
 
 The current 2 GB VDS cannot reliably run `llama3.1:8b`; the server killed Ollama with OOM while loading the model. OpenRouter is cheaper than the operational trouble here and keeps the worker simple.
 
@@ -31,7 +31,7 @@ Dzen articles use a separate editorial prompt. The model receives the latest can
     ARTICLE_LLM_PROVIDER=openrouter
     OPENROUTER_API_KEY=<real_openrouter_key>
     OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash
-    OPENROUTER_ARTICLE_MODEL=openai/gpt-5.3-chat
+    OPENROUTER_ARTICLE_MODEL=openai/gpt-5.6-terra
 
 `--doctor` should show:
 

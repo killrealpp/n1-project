@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from typing import Awaitable, Callable
+
 import httpx
 
 from n1_project.article_channels import configured_article_channels, daily_article_schedule
 from n1_project.config import Settings
 from n1_project.scheduler import local_now
+
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
+
+ModelCatalogFetcher = Callable[[], Awaitable[list[str]]]
 
 
 def mtproto_missing_settings(settings: Settings) -> list[str]:
@@ -160,10 +166,98 @@ async def ollama_health(settings: Settings) -> dict[str, object]:
     }
 
 
-async def run_health_check(settings: Settings) -> dict[str, object]:
+async def fetch_openrouter_model_ids(timeout: float = 10.0) -> list[str]:
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.get(OPENROUTER_MODELS_URL)
+        response.raise_for_status()
+        data = response.json()
+    ids: list[str] = []
+    for item in data.get("data", []):
+        model_id = item.get("id")
+        if model_id:
+            ids.append(str(model_id))
+    return ids
+
+
+def configured_openrouter_models(settings: Settings) -> dict[str, str]:
+    models: dict[str, str] = {}
+    if settings.translation_provider == "openrouter" and settings.openrouter_translation_model:
+        models["OPENROUTER_TRANSLATION_MODEL"] = settings.openrouter_translation_model
+    if settings.article_llm_provider == "openrouter" and settings.openrouter_article_model:
+        models["OPENROUTER_ARTICLE_MODEL"] = settings.openrouter_article_model
+    return models
+
+
+def model_in_catalog(model: str, catalog: set[str]) -> bool:
+    if model in catalog:
+        return True
+    return model.split(":", 1)[0] in catalog
+
+
+async def openrouter_models_health(
+    settings: Settings,
+    fetch: ModelCatalogFetcher | None = None,
+) -> dict[str, object]:
+    configured = configured_openrouter_models(settings)
+    if not configured:
+        return {
+            "ok": None,
+            "status": "skipped",
+            "skipped": True,
+            "reason": "OpenRouter is not used for translation or article writing.",
+            "url": OPENROUTER_MODELS_URL,
+            "catalog_size": 0,
+            "models": {},
+            "problems": [],
+            "error": None,
+        }
+
+    fetcher = fetch or fetch_openrouter_model_ids
+    try:
+        catalog_ids = await fetcher()
+    except Exception as exc:
+        return {
+            "ok": None,
+            "status": "unknown",
+            "skipped": False,
+            "reason": "Не удалось получить каталог моделей OpenRouter.",
+            "url": OPENROUTER_MODELS_URL,
+            "catalog_size": 0,
+            "models": {key: {"model": value, "present": None} for key, value in sorted(configured.items())},
+            "problems": [],
+            "error": str(exc),
+        }
+
+    catalog = set(catalog_ids)
+    models: dict[str, object] = {}
+    problems: list[str] = []
+    for env_key, model in sorted(configured.items()):
+        present = model_in_catalog(model, catalog)
+        models[env_key] = {"model": model, "present": present}
+        if not present:
+            problems.append(f"модель {model} отсутствует в каталоге OpenRouter")
+
+    return {
+        "ok": not problems,
+        "status": "green" if not problems else "red",
+        "skipped": False,
+        "reason": None,
+        "url": OPENROUTER_MODELS_URL,
+        "catalog_size": len(catalog),
+        "models": models,
+        "problems": problems,
+        "error": None,
+    }
+
+
+async def run_health_check(
+    settings: Settings,
+    openrouter_fetch: ModelCatalogFetcher | None = None,
+) -> dict[str, object]:
     ollama_required = settings.translation_provider == "ollama" or settings.article_llm_provider == "ollama"
     return {
         "settings": settings_health(settings),
+        "openrouter": await openrouter_models_health(settings, fetch=openrouter_fetch),
         "ollama": await ollama_health(settings)
         if ollama_required
         else {

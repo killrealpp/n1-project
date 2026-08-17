@@ -299,7 +299,7 @@ Recommended OpenRouter settings:
     ARTICLE_LLM_PROVIDER=openrouter
     OPENROUTER_API_KEY=...
     OPENROUTER_TRANSLATION_MODEL=deepseek/deepseek-v4-flash
-    OPENROUTER_ARTICLE_MODEL=openai/gpt-5.3-chat
+    OPENROUTER_ARTICLE_MODEL=openai/gpt-5.6-terra
 
 Short-post translation and Dzen article generation should both use OpenRouter in production.
 

@@ -1,7 +1,14 @@
 from pathlib import Path
 
 from n1_project.config import Settings
-from n1_project.health import run_health_check, settings_health
+from n1_project.health import openrouter_models_health, run_health_check, settings_health
+
+
+def fake_catalog(*model_ids: str):
+    async def fetch() -> list[str]:
+        return list(model_ids)
+
+    return fetch
 
 
 def test_settings_health_flags(tmp_path: Path) -> None:
@@ -78,16 +85,101 @@ async def test_run_health_skips_ollama_when_external_providers_are_used(tmp_path
             "ARTICLE_LLM_PROVIDER": "openrouter",
             "OPENROUTER_API_KEY": "key",
             "OPENROUTER_TRANSLATION_MODEL": "deepseek/deepseek-v4-flash",
+            "OPENROUTER_ARTICLE_MODEL": "openai/gpt-5.6-terra",
+        },
+        project_root=tmp_path,
+    )
+
+    health = await run_health_check(
+        settings,
+        openrouter_fetch=fake_catalog("deepseek/deepseek-v4-flash", "openai/gpt-5.6-terra"),
+    )
+
+    assert health["settings"]["translation_provider"] == "openrouter"
+    assert health["settings"]["openrouter_ready"] is True
+    assert health["ollama"]["skipped"] is True
+    assert health["openrouter"]["status"] == "green"
+
+
+async def test_openrouter_health_flags_missing_article_model(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TRANSLATION_PROVIDER": "openrouter",
+            "ARTICLE_LLM_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": "key",
+            "OPENROUTER_TRANSLATION_MODEL": "deepseek/deepseek-v4-flash",
             "OPENROUTER_ARTICLE_MODEL": "openai/gpt-5.3-chat",
         },
         project_root=tmp_path,
     )
 
-    health = await run_health_check(settings)
+    health = await openrouter_models_health(
+        settings,
+        fetch=fake_catalog("deepseek/deepseek-v4-flash", "openai/gpt-5.2-chat", "openai/gpt-5.6-terra"),
+    )
 
-    assert health["settings"]["translation_provider"] == "openrouter"
-    assert health["settings"]["openrouter_ready"] is True
-    assert health["ollama"]["skipped"] is True
+    assert health["ok"] is False
+    assert health["status"] == "red"
+    assert health["problems"] == ["модель openai/gpt-5.3-chat отсутствует в каталоге OpenRouter"]
+    assert health["models"]["OPENROUTER_TRANSLATION_MODEL"]["present"] is True
+    assert health["models"]["OPENROUTER_ARTICLE_MODEL"]["present"] is False
+
+
+async def test_openrouter_health_accepts_model_variant_suffix(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TRANSLATION_PROVIDER": "openrouter",
+            "ARTICLE_LLM_PROVIDER": "openrouter",
+            "OPENROUTER_ARTICLE_MODEL": "openai/gpt-5.6-terra:online",
+            "OPENROUTER_TRANSLATION_MODEL": "deepseek/deepseek-v4-flash",
+        },
+        project_root=tmp_path,
+    )
+
+    health = await openrouter_models_health(
+        settings,
+        fetch=fake_catalog("deepseek/deepseek-v4-flash", "openai/gpt-5.6-terra"),
+    )
+
+    assert health["ok"] is True
+    assert health["problems"] == []
+
+
+async def test_openrouter_health_does_not_fail_doctor_when_catalog_is_unreachable(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TRANSLATION_PROVIDER": "openrouter",
+            "ARTICLE_LLM_PROVIDER": "openrouter",
+            "OPENROUTER_ARTICLE_MODEL": "openai/gpt-5.6-terra",
+            "OPENROUTER_TRANSLATION_MODEL": "deepseek/deepseek-v4-flash",
+        },
+        project_root=tmp_path,
+    )
+
+    async def broken_fetch() -> list[str]:
+        raise RuntimeError("connection refused")
+
+    health = await openrouter_models_health(settings, fetch=broken_fetch)
+
+    assert health["ok"] is None
+    assert health["status"] == "unknown"
+    assert health["problems"] == []
+    assert "connection refused" in str(health["error"])
+
+
+async def test_openrouter_health_is_skipped_for_local_providers(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {
+            "TRANSLATION_PROVIDER": "ollama",
+            "ARTICLE_LLM_PROVIDER": "ollama",
+        },
+        project_root=tmp_path,
+    )
+
+    health = await openrouter_models_health(settings, fetch=fake_catalog())
+
+    assert health["status"] == "skipped"
+    assert health["skipped"] is True
 
 
 def test_settings_health_reports_only_missing_mtproto_session(tmp_path: Path) -> None:
