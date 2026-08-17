@@ -447,6 +447,63 @@ class QueueDatabase:
                 (status, error, message_id),
             )
 
+    def dead_translation_count(self, max_attempts: int) -> int:
+        """Count rows that can never be retried again under the attempt cap."""
+        if max_attempts <= 0:
+            return 0
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS count
+                FROM messages
+                WHERE status = 'failed_translation' AND attempts >= ?
+                """,
+                (max_attempts,),
+            ).fetchone()
+        return int(row["count"])
+
+    def requeue_failed_translations(
+        self,
+        message_ids: Iterable[int] | None = None,
+        since: str | None = None,
+        until: str | None = None,
+    ) -> list[int]:
+        """Reset failed translation rows so the worker picks them up again.
+
+        Returns the ids that were actually reset. With no selector every failed
+        row is requeued, which is what the plain --requeue-translations does.
+        """
+        clauses = ["status = 'failed_translation'"]
+        params: list[object] = []
+        ids = list(message_ids) if message_ids is not None else None
+        if ids is not None:
+            if not ids:
+                return []
+            clauses.append(f"id IN ({','.join('?' for _ in ids)})")
+            params.extend(ids)
+        if since:
+            clauses.append("date(created_at) >= date(?)")
+            params.append(since)
+        if until:
+            clauses.append("date(created_at) <= date(?)")
+            params.append(until)
+        where_sql = " AND ".join(clauses)
+
+        with self.connect() as conn:
+            rows = conn.execute(f"SELECT id FROM messages WHERE {where_sql} ORDER BY id", params).fetchall()
+            selected = [int(row["id"]) for row in rows]
+            if selected:
+                conn.execute(
+                    f"""
+                    UPDATE messages
+                    SET status = 'received', attempts = 0, last_error = NULL,
+                        updated_at = datetime('now')
+                    WHERE {where_sql}
+                    """,
+                    params,
+                )
+        return selected
+
     def reset_failed_translations(self) -> int:
         with self.connect() as conn:
             cur = conn.execute(

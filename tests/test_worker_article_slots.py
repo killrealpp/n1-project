@@ -4,10 +4,12 @@ from n1_project.admin import AdminNotifier
 from n1_project.article_channels import ArticleDueSlot, configured_article_channels
 from n1_project.config import Settings
 from n1_project.db import QueueDatabase
+from n1_project.domain import SourcePost
 from n1_project.llm import TextModel
 from n1_project.worker import (
     article_slot_is_open,
     handle_article_slot_failure,
+    report_dead_translation_queue,
     run_processing_pass,
 )
 
@@ -160,3 +162,46 @@ async def test_one_failing_slot_does_not_stop_the_other_slots_or_the_pass(tmp_pa
     assert attempted == [russia.slot_key, energy.slot_key]
     assert db.article_slot_state(russia.slot_key) == ("failed_generation", 1)
     assert db.article_slot_state(energy.slot_key) == (None, 0)
+
+
+class RecordingAdmin(AdminNotifier):
+    def __init__(self) -> None:
+        super().__init__("token", "-100", dry_run=True)
+        self.messages: list[tuple[str, str]] = []
+
+    async def notify(self, title: str, body: str, *, level: str = "info"):
+        self.messages.append((title, body))
+        return await super().notify(title, body, level=level)
+
+
+async def test_dead_translation_queue_is_reported_once_per_interval(tmp_path: Path) -> None:
+    settings = Settings.from_mapping(
+        {"TRANSLATION_MAX_ATTEMPTS": "5", "DEAD_QUEUE_ALERT_INTERVAL_HOURS": "24"},
+        project_root=tmp_path,
+    )
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    message_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Brent is higher"))
+    for _ in range(5):
+        db.mark_failed(message_id, "failed_translation", "added numbers: 1")
+    admin = RecordingAdmin()
+
+    await report_dead_translation_queue(db, settings, admin)
+    await report_dead_translation_queue(db, settings, admin)
+
+    assert len(admin.messages) == 1
+    title, body = admin.messages[0]
+    assert title == "Dead translation queue"
+    assert "1 сообщений" in body
+    assert "--requeue-translations" in body
+
+
+async def test_dead_translation_queue_stays_quiet_when_the_queue_is_clean(tmp_path: Path) -> None:
+    settings = Settings.from_mapping({"TRANSLATION_MAX_ATTEMPTS": "5"}, project_root=tmp_path)
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    admin = RecordingAdmin()
+
+    await report_dead_translation_queue(db, settings, admin)
+
+    assert admin.messages == []

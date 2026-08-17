@@ -305,3 +305,70 @@ def test_message_topic_migration_for_existing_db(tmp_path: Path) -> None:
     db.set_message_topic(message_id, "tech")
 
     assert db.message_by_id(message_id).topic == "tech"
+
+
+def test_requeue_failed_translations_by_ids(tmp_path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    first, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Brent is higher"))
+    second, _ = db.upsert_source_post(SourcePost("@num1_ch", "2", "BTC ETF inflows rise"))
+    for message_id in (first, second):
+        for _ in range(5):
+            db.mark_failed(message_id, "failed_translation", "added numbers: 1")
+
+    requeued = db.requeue_failed_translations(message_ids=[first])
+
+    assert requeued == [first]
+    assert db.message_by_id(first).status == "received"
+    assert db.message_by_id(first).attempts == 0
+    assert db.message_by_id(first).last_error is None
+    assert db.message_by_id(second).status == "failed_translation"
+
+
+def test_requeue_failed_translations_without_selectors_takes_everything(tmp_path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    first, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Brent is higher"))
+    second, _ = db.upsert_source_post(SourcePost("@num1_ch", "2", "BTC ETF inflows rise"))
+    db.mark_failed(first, "failed_translation", "boom")
+    db.mark_failed(second, "failed_translation", "boom")
+
+    assert db.requeue_failed_translations() == [first, second]
+    assert db.dead_translation_count(1) == 0
+
+
+def test_requeue_failed_translations_by_date_range(tmp_path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    old_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Old signal"))
+    new_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "2", "New signal"))
+    db.mark_failed(old_id, "failed_translation", "boom")
+    db.mark_failed(new_id, "failed_translation", "boom")
+    with db.connect() as conn:
+        conn.execute("UPDATE messages SET created_at = '2026-07-01 10:00:00' WHERE id = ?", (old_id,))
+        conn.execute("UPDATE messages SET created_at = '2026-08-15 10:00:00' WHERE id = ?", (new_id,))
+
+    assert db.requeue_failed_translations(until="2026-07-31") == [old_id]
+    assert db.message_by_id(new_id).status == "failed_translation"
+
+
+def test_requeue_failed_translations_ignores_healthy_rows(tmp_path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    message_id, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Brent is higher"))
+    db.mark_translated(message_id, "Нефть Brent растет")
+
+    assert db.requeue_failed_translations() == []
+    assert db.message_by_id(message_id).status == "translated"
+
+
+def test_dead_translation_count_only_counts_exhausted_rows(tmp_path) -> None:
+    db = QueueDatabase(tmp_path / "queue.sqlite3")
+    db.initialize()
+    exhausted, _ = db.upsert_source_post(SourcePost("@num1_ch", "1", "Brent is higher"))
+    retryable, _ = db.upsert_source_post(SourcePost("@num1_ch", "2", "BTC ETF inflows rise"))
+    for _ in range(5):
+        db.mark_failed(exhausted, "failed_translation", "boom")
+    db.mark_failed(retryable, "failed_translation", "boom")
+
+    assert db.dead_translation_count(5) == 1

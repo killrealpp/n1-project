@@ -1647,6 +1647,61 @@ def due_article_slot(settings: Settings, now: datetime | None = None) -> str | N
     return f"{current.date().isoformat()} {slot}"
 
 
+DEAD_TRANSLATION_QUEUE_ALERT_STATE_KEY = "dead_translation_queue_alert_at"
+
+
+def parse_row_id_list(value: str) -> list[int]:
+    ids: list[int] = []
+    for item in value.replace(";", ",").split(","):
+        cleaned = item.strip()
+        if cleaned:
+            ids.append(int(cleaned))
+    return ids
+
+
+async def report_dead_translation_queue(
+    db: QueueDatabase,
+    settings: Settings,
+    admin: AdminNotifier | None,
+) -> None:
+    """Tell the admin how many rows can never be translated again.
+
+    Rows that burned the attempt cap are invisible otherwise: they are simply
+    skipped on every pass, so a growing dead queue never surfaces anywhere.
+    """
+    if not settings.dead_queue_alert_enabled or not admin or not admin.configured:
+        return
+
+    count = db.dead_translation_count(settings.translation_max_attempts)
+    if not count:
+        # Clear the throttle so a fresh problem is reported without waiting.
+        db.set_state(DEAD_TRANSLATION_QUEUE_ALERT_STATE_KEY, "")
+        return
+
+    now = local_now(settings.app_timezone)
+    last_raw = db.get_state(DEAD_TRANSLATION_QUEUE_ALERT_STATE_KEY)
+    if last_raw:
+        try:
+            last_reported = datetime.fromisoformat(last_raw)
+        except ValueError:
+            last_reported = None
+        if last_reported is not None:
+            elapsed_hours = (now - last_reported).total_seconds() / 3600
+            if elapsed_hours < settings.dead_queue_alert_interval_hours:
+                return
+
+    db.set_state(DEAD_TRANSLATION_QUEUE_ALERT_STATE_KEY, now.isoformat())
+    await notify_admin(
+        admin,
+        "Dead translation queue",
+        f"{count} сообщений исчерпали {settings.translation_max_attempts} попыток перевода "
+        f"и больше не будут обработаны.\n\n"
+        f"Посмотреть: python -m n1_project.worker --list-failed-translations\n"
+        f"Вернуть в очередь: python -m n1_project.worker --requeue-translations",
+        level="warning",
+    )
+
+
 FINISHED_ARTICLE_SLOT_STATUSES = frozenset({"published", "pending_review"})
 
 
@@ -1731,6 +1786,8 @@ async def run_processing_pass(
     if skip_translate:
         return
     await translate_pending(db, settings, model, dry_run=dry_run, limit=limit, admin=admin)
+    if not dry_run:
+        await report_dead_translation_queue(db, settings, admin)
     if not skip_publish:
         await publish_pending(db, settings, dry_run=dry_run, limit=limit, admin=admin)
 
@@ -1810,6 +1867,14 @@ async def amain() -> None:
     parser.add_argument("--list-articles", action="store_true", help="Print recent Dzen articles and exit")
     parser.add_argument("--list-failed-translations", action="store_true", help="Print failed translation rows and exit")
     parser.add_argument("--reset-failed", action="store_true", help="Move failed translation/publish rows back to retryable states")
+    parser.add_argument(
+        "--requeue-translations",
+        action="store_true",
+        help="Requeue failed translation rows; without selectors it requeues all of them",
+    )
+    parser.add_argument("--requeue-ids", help="Comma-separated row ids for --requeue-translations")
+    parser.add_argument("--requeue-since", help="Only requeue rows created on or after this date (YYYY-MM-DD)")
+    parser.add_argument("--requeue-until", help="Only requeue rows created on or before this date (YYYY-MM-DD)")
     parser.add_argument("--doctor", action="store_true", help="Check env and provider readiness")
     parser.add_argument("--print-translation-prompt", action="store_true", help="Print the translation prompt without calling an LLM")
     parser.add_argument("--print-article-prompt", action="store_true", help="Print the Dzen article prompt without calling an LLM")
@@ -1906,6 +1971,25 @@ async def amain() -> None:
 
     if args.approve_article is not None:
         await approve_article_from_cli(db, settings, admin, args.approve_article, dry_run=args.dry_run)
+        return
+
+    if args.requeue_translations:
+        requeued = db.requeue_failed_translations(
+            message_ids=parse_row_id_list(args.requeue_ids) if args.requeue_ids else None,
+            since=args.requeue_since,
+            until=args.requeue_until,
+        )
+        print(
+            json.dumps(
+                {
+                    "requeued_count": len(requeued),
+                    "requeued_ids": requeued,
+                    "dead_rows_left": db.dead_translation_count(settings.translation_max_attempts),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
         return
 
     if args.reset_failed:

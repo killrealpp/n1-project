@@ -114,6 +114,8 @@ class Settings:
     worker_poll_seconds: int
     worker_batch_limit: int
     translation_max_attempts: int
+    dead_queue_alert_enabled: bool
+    dead_queue_alert_interval_hours: int
 
     telegram_bot_token: str
     telegram_target_chat_id: str
@@ -238,6 +240,8 @@ class Settings:
             worker_poll_seconds=parse_int(env.get("WORKER_POLL_SECONDS"), 300),
             worker_batch_limit=parse_int(env.get("WORKER_BATCH_LIMIT"), 10),
             translation_max_attempts=parse_int(env.get("TRANSLATION_MAX_ATTEMPTS"), 5),
+            dead_queue_alert_enabled=parse_bool(env.get("DEAD_QUEUE_ALERT_ENABLED"), True),
+            dead_queue_alert_interval_hours=parse_int(env.get("DEAD_QUEUE_ALERT_INTERVAL_HOURS"), 24),
             telegram_bot_token=env.get("TELEGRAM_BOT_TOKEN", ""),
             telegram_target_chat_id=env.get("TELEGRAM_TARGET_CHAT_ID", ""),
             telegram_source_channel_id=env.get("TELEGRAM_SOURCE_CHANNEL_ID", ""),
