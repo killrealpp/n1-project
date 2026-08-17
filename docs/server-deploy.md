@@ -180,6 +180,25 @@ Recent logs without following:
 journalctl -u n1-worker -n 100 --no-pager
 ```
 
+The worker writes only to stdout/stderr, so under systemd every line goes to
+journald and nothing is written under `logs/`. Do not reintroduce a redirect
+such as `>> logs/n1-worker.log`: nothing rotates that file, and the copies left
+over from the old `screen` workflow grew to several megabytes and then went
+stale when the service moved to systemd on 2026-08-04.
+
+Delete the leftovers once:
+
+```bash
+rm -f ~/n1-project/logs/n1-worker.log ~/n1-project/logs/worker.log
+```
+
+Journald handles retention itself. To cap it, set `SystemMaxUse=` in
+`/etc/systemd/journald.conf`, or trim the current journal:
+
+```bash
+journalctl --vacuum-time=30d
+```
+
 ## 11. Normal Restart
 
 Use this sequence for future deploys:
