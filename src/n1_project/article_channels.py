@@ -4,7 +4,7 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from n1_project.domain import QueuedMessage
 from n1_project.scheduler import local_now
@@ -189,16 +189,36 @@ def daily_article_schedule(settings: Settings, current_date: date) -> list[Artic
     return slots
 
 
-def due_article_slots(settings: Settings, now: datetime | None = None) -> list[ArticleDueSlot]:
+def due_article_slots(
+    settings: Settings,
+    now: datetime | None = None,
+    *,
+    slot_is_open: Callable[[ArticleDueSlot], bool] | None = None,
+) -> list[ArticleDueSlot]:
+    """Return the article slots that should be generated right now.
+
+    With `slot_is_open` supplied and end-of-day retries enabled, a slot stays
+    due from its publish time until midnight for as long as the caller reports
+    it unfinished. Without a caller-supplied check there is no way to tell a
+    finished slot from a failed one, so the legacy fixed window applies and the
+    slot gets exactly one chance.
+    """
     if not settings.dzen_daily_articles_enabled:
         return []
     current = now or local_now(settings.app_timezone)
     current_minutes = current.hour * 60 + current.minute
+    retry_until_end_of_day = settings.dzen_article_slot_retry_until_end_of_day and slot_is_open is not None
     due: list[ArticleDueSlot] = []
     for slot in daily_article_schedule(settings, current.date()):
-        target_minutes = parse_hhmm(slot.publish_time)
-        if 0 <= current_minutes - target_minutes < settings.dzen_article_slot_window_minutes:
-            due.append(slot)
+        elapsed_minutes = current_minutes - parse_hhmm(slot.publish_time)
+        if elapsed_minutes < 0:
+            continue
+        if retry_until_end_of_day:
+            if not slot_is_open(slot):
+                continue
+        elif elapsed_minutes >= settings.dzen_article_slot_window_minutes:
+            continue
+        due.append(slot)
     return due
 
 

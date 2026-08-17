@@ -42,6 +42,7 @@ class ArticleRecord:
     destination_id: str | None
     error: str | None
     review_attempts: int
+    generation_attempts: int
     review_chat_id: str | None
     review_message_id: str | None
     image_url: str | None

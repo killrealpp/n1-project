@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS articles (
   destination_id TEXT,
   error TEXT,
   review_attempts INTEGER NOT NULL DEFAULT 0,
+  generation_attempts INTEGER NOT NULL DEFAULT 0,
   review_chat_id TEXT,
   review_message_id TEXT,
   image_url TEXT,
@@ -101,6 +102,8 @@ class QueueDatabase:
             conn.execute("ALTER TABLE articles ADD COLUMN slot_key TEXT")
         if "review_attempts" not in columns:
             conn.execute("ALTER TABLE articles ADD COLUMN review_attempts INTEGER NOT NULL DEFAULT 0")
+        if "generation_attempts" not in columns:
+            conn.execute("ALTER TABLE articles ADD COLUMN generation_attempts INTEGER NOT NULL DEFAULT 0")
         if "review_chat_id" not in columns:
             conn.execute("ALTER TABLE articles ADD COLUMN review_chat_id TEXT")
         if "review_message_id" not in columns:
@@ -288,12 +291,28 @@ class QueueDatabase:
             ).fetchone()
         return str(row["status"]) if row else None
 
+    def article_slot_state(self, slot_key: str) -> tuple[str | None, int]:
+        """Return the recorded status and generation attempt count for a slot."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT status, generation_attempts
+                FROM articles
+                WHERE slot_key = ?
+                LIMIT 1
+                """,
+                (slot_key,),
+            ).fetchone()
+        if not row:
+            return None, 0
+        return str(row["status"]), int(row["generation_attempts"])
+
     def article_for_slot(self, slot_key: str) -> ArticleRecord | None:
         with self.connect() as conn:
             row = conn.execute(
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
-                       review_attempts, review_chat_id, review_message_id,
+                       review_attempts, generation_attempts, review_chat_id, review_message_id,
                        image_url, image_query, image_credit,
                        plan_json, selected_message_ids_json,
                        created_at, updated_at
@@ -310,7 +329,7 @@ class QueueDatabase:
             row = conn.execute(
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
-                       review_attempts, review_chat_id, review_message_id,
+                       review_attempts, generation_attempts, review_chat_id, review_message_id,
                        image_url, image_query, image_credit,
                        plan_json, selected_message_ids_json,
                        created_at, updated_at
@@ -327,7 +346,7 @@ class QueueDatabase:
             rows = conn.execute(
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
-                       review_attempts, review_chat_id, review_message_id,
+                       review_attempts, generation_attempts, review_chat_id, review_message_id,
                        image_url, image_query, image_credit,
                        plan_json, selected_message_ids_json,
                        created_at, updated_at
@@ -349,7 +368,7 @@ class QueueDatabase:
             rows = conn.execute(
                 """
                 SELECT id, slot_key, text, status, destination_id, error,
-                       review_attempts, review_chat_id, review_message_id,
+                       review_attempts, generation_attempts, review_chat_id, review_message_id,
                        image_url, image_query, image_credit,
                        plan_json, selected_message_ids_json,
                        created_at, updated_at
@@ -504,26 +523,29 @@ class QueueDatabase:
         image_credit: str | None = None,
         plan_json: str | None = None,
         selected_message_ids: Iterable[int] | None = None,
+        increment_generation_attempt: bool = False,
     ) -> int:
         ids = list(message_ids)
         selected_ids = list(selected_message_ids) if selected_message_ids is not None else ids
         selected_message_ids_json = json.dumps(selected_ids, ensure_ascii=False) if selected_ids else None
+        attempt_increment = 1 if increment_generation_attempt else 0
         with self.connect() as conn:
             cur = conn.execute(
                 """
                 INSERT INTO articles (
                   slot_key, text, status, destination_id, error,
-                  review_attempts, review_chat_id, review_message_id,
+                  review_attempts, generation_attempts, review_chat_id, review_message_id,
                   image_url, image_query, image_credit,
                   plan_json, selected_message_ids_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(slot_key) WHERE slot_key IS NOT NULL DO UPDATE SET
                   text = excluded.text,
                   status = excluded.status,
                   destination_id = excluded.destination_id,
                   error = excluded.error,
                   review_attempts = excluded.review_attempts,
+                  generation_attempts = articles.generation_attempts + ?,
                   review_chat_id = COALESCE(excluded.review_chat_id, articles.review_chat_id),
                   review_message_id = COALESCE(excluded.review_message_id, articles.review_message_id),
                   image_url = COALESCE(excluded.image_url, articles.image_url),
@@ -540,6 +562,7 @@ class QueueDatabase:
                     destination_id,
                     error,
                     review_attempts if review_attempts is not None else 0,
+                    attempt_increment,
                     review_chat_id,
                     review_message_id,
                     image_url,
@@ -547,6 +570,7 @@ class QueueDatabase:
                     image_credit,
                     plan_json,
                     selected_message_ids_json,
+                    attempt_increment,
                 ),
             )
             if cur.lastrowid:
@@ -658,6 +682,7 @@ class QueueDatabase:
             destination_id=row["destination_id"],
             error=row["error"],
             review_attempts=int(row["review_attempts"]),
+            generation_attempts=int(row["generation_attempts"]),
             review_chat_id=row["review_chat_id"],
             review_message_id=row["review_message_id"],
             image_url=row["image_url"],

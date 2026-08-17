@@ -136,6 +136,8 @@ class Settings:
     dzen_article_windows: dict[str, list[str]]
     dzen_article_randomize_times: bool
     dzen_article_slot_window_minutes: int
+    dzen_article_slot_retry_until_end_of_day: bool
+    dzen_article_slot_max_attempts: int
     dzen_article_parse_mode: str
     dzen_article_footer_enabled: bool
     dzen_article_footer_policy: str
@@ -251,6 +253,10 @@ class Settings:
             dzen_article_windows=parse_channel_windows(env.get("DZEN_ARTICLE_WINDOWS")),
             dzen_article_randomize_times=parse_bool(env.get("DZEN_ARTICLE_RANDOMIZE_TIMES"), True),
             dzen_article_slot_window_minutes=parse_int(env.get("DZEN_ARTICLE_SLOT_WINDOW_MINUTES"), 5),
+            dzen_article_slot_retry_until_end_of_day=parse_bool(
+                env.get("DZEN_ARTICLE_SLOT_RETRY_UNTIL_END_OF_DAY"), True
+            ),
+            dzen_article_slot_max_attempts=parse_int(env.get("DZEN_ARTICLE_SLOT_MAX_ATTEMPTS"), 6),
             dzen_article_parse_mode=env.get("DZEN_ARTICLE_PARSE_MODE", "HTML").strip(),
             dzen_article_footer_enabled=parse_bool(env.get("DZEN_ARTICLE_FOOTER_ENABLED"), True),
             dzen_article_footer_policy=env.get("DZEN_ARTICLE_FOOTER_POLICY", "always").strip().lower(),

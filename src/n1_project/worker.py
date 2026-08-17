@@ -17,6 +17,7 @@ from n1_project.admin import ARTICLE_ACCEPT_PREFIX, ARTICLE_REJECT_PREFIX, Admin
 from n1_project.article_footer import append_dzen_article_footer, dzen_article_footer_reserve_chars
 from n1_project.article_channels import (
     ArticleChannel,
+    ArticleDueSlot,
     article_channel_from_slot,
     article_channel_review_note,
     classify_message_topic,
@@ -981,6 +982,7 @@ async def generate_dzen_article(
             selected_message_ids=selected_message_ids,
             slot_key=slot_key,
             plan_json=plan_json,
+            increment_generation_attempt=True,
         )
         await notify_admin(
             admin,
@@ -1013,6 +1015,7 @@ async def generate_dzen_article(
             selected_message_ids=selected_message_ids,
             slot_key=slot_key,
             plan_json=plan_json,
+            increment_generation_attempt=True,
         )
         await notify_admin(
             admin,
@@ -1046,6 +1049,7 @@ async def generate_dzen_article(
             selected_message_ids=selected_message_ids,
             slot_key=slot_key,
             plan_json=plan_json,
+            increment_generation_attempt=True,
         )
         await notify_admin(
             admin,
@@ -1479,6 +1483,7 @@ def print_articles(db: QueueDatabase, limit: int) -> None:
                 "destination_id": article.destination_id,
                 "error": article.error,
                 "review_attempts": article.review_attempts,
+                "generation_attempts": article.generation_attempts,
                 "created_at": article.created_at,
                 "updated_at": article.updated_at,
                 "image_configured": bool(article.image_url),
@@ -1642,6 +1647,67 @@ def due_article_slot(settings: Settings, now: datetime | None = None) -> str | N
     return f"{current.date().isoformat()} {slot}"
 
 
+FINISHED_ARTICLE_SLOT_STATUSES = frozenset({"published", "pending_review"})
+
+
+def article_slot_is_open(db: QueueDatabase, settings: Settings, slot: ArticleDueSlot) -> bool:
+    """Report whether a due slot still needs an article today.
+
+    A slot closes once it is published or waiting for admin review, and also
+    once it has burned its attempt budget, so a persistent failure cannot keep
+    calling the article model every poll until midnight.
+    """
+    status, attempts = db.article_slot_state(slot.slot_key)
+    if status in FINISHED_ARTICLE_SLOT_STATUSES:
+        return False
+    max_attempts = settings.dzen_article_slot_max_attempts
+    if max_attempts > 0 and attempts >= max_attempts:
+        return False
+    return True
+
+
+async def handle_article_slot_failure(
+    db: QueueDatabase,
+    settings: Settings,
+    admin: AdminNotifier,
+    slot: ArticleDueSlot,
+    exc: Exception,
+    *,
+    dry_run: bool,
+) -> None:
+    """Record one failed article slot without killing the rest of the pass."""
+    logging.exception(
+        "Dzen article slot failed channel=%s slot=%s",
+        slot.channel.key,
+        slot.slot_key,
+    )
+    summary = f"{type(exc).__name__}: {exc}".strip()
+    article_id: int | None = None
+    attempts = 0
+    if not dry_run:
+        article_id = db.record_article(
+            text="",
+            status="failed_generation",
+            error=summary[:1000],
+            message_ids=[],
+            selected_message_ids=[],
+            slot_key=slot.slot_key,
+            increment_generation_attempt=True,
+        )
+        _, attempts = db.article_slot_state(slot.slot_key)
+    remaining = max(0, settings.dzen_article_slot_max_attempts - attempts)
+    await notify_admin(
+        admin,
+        "Dzen article slot failed",
+        f"slot={slot.slot_key}\n"
+        f"channel={slot.channel.key}\n"
+        f"article_id={article_id}\n"
+        f"attempt={attempts} of {settings.dzen_article_slot_max_attempts} (remaining={remaining})\n"
+        f"{summary}\n\n"
+        f"{exception_report(exc)}",
+    )
+
+
 async def run_processing_pass(
     db: QueueDatabase,
     settings: Settings,
@@ -1668,7 +1734,10 @@ async def run_processing_pass(
     if not skip_publish:
         await publish_pending(db, settings, dry_run=dry_run, limit=limit, admin=admin)
 
-    scheduled_slots = due_article_slots(settings)
+    scheduled_slots = due_article_slots(
+        settings,
+        slot_is_open=lambda slot: article_slot_is_open(db, settings, slot),
+    )
     for scheduled_slot in scheduled_slots:
         logging.info(
             "Dzen article slot due: channel=%s slot=%s time=%s window=%s",
@@ -1677,16 +1746,21 @@ async def run_processing_pass(
             scheduled_slot.publish_time,
             scheduled_slot.window,
         )
-        await generate_dzen_article(
-            db,
-            settings,
-            model,
-            admin,
-            dry_run=dry_run,
-            force=force_article,
-            slot_key=scheduled_slot.slot_key,
-            article_channel=scheduled_slot.channel,
-        )
+        try:
+            await generate_dzen_article(
+                db,
+                settings,
+                model,
+                admin,
+                dry_run=dry_run,
+                force=force_article,
+                slot_key=scheduled_slot.slot_key,
+                article_channel=scheduled_slot.channel,
+            )
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            await handle_article_slot_failure(db, settings, admin, scheduled_slot, exc, dry_run=dry_run)
 
     if article and not scheduled_slots:
         for manual_channel in manual_article_channels(settings, article_channel):

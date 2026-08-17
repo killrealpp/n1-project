@@ -106,6 +106,8 @@ def settings_health(settings: Settings) -> dict[str, object]:
         ),
         "dzen_article_randomize_times": settings.dzen_article_randomize_times,
         "dzen_article_slot_window_minutes": settings.dzen_article_slot_window_minutes,
+        "dzen_article_slot_retry_until_end_of_day": settings.dzen_article_slot_retry_until_end_of_day,
+        "dzen_article_slot_max_attempts": settings.dzen_article_slot_max_attempts,
         "dzen_article_parse_mode": settings.dzen_article_parse_mode,
         "dzen_article_footer": {
             "enabled": settings.dzen_article_footer_enabled,

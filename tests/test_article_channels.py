@@ -144,3 +144,54 @@ def test_saved_topic_overrides_keyword_matches() -> None:
 
     assert filter_messages_for_channel(messages, "energy") == []
     assert [message.id for message in filter_messages_for_channel(messages, "tech")] == [1]
+
+
+def end_of_day_settings(tmp_path: Path, **overrides: str) -> Settings:
+    values = {
+        "DZEN_DAILY_ARTICLES_ENABLED": "true",
+        "DZEN_ARTICLE_CHANNELS": "energy",
+        "DZEN_ARTICLE_WINDOWS": "energy=09:20-10:20",
+        "DZEN_ARTICLE_RANDOMIZE_TIMES": "false",
+    }
+    values.update(overrides)
+    return Settings.from_mapping(values, project_root=tmp_path)
+
+
+def test_due_article_slots_keeps_failed_slot_open_past_the_fixed_window(tmp_path: Path) -> None:
+    settings = end_of_day_settings(tmp_path)
+    # Three hours after the 09:20 target the legacy five-minute window is long gone.
+    now = datetime(2026, 7, 10, 12, 40, tzinfo=ZoneInfo("Europe/Moscow"))
+
+    due = due_article_slots(settings, now, slot_is_open=lambda slot: True)
+
+    assert [slot.slot_key for slot in due] == ["2026-07-10 energy:morning"]
+
+
+def test_due_article_slots_closes_finished_slot(tmp_path: Path) -> None:
+    settings = end_of_day_settings(tmp_path)
+    now = datetime(2026, 7, 10, 12, 40, tzinfo=ZoneInfo("Europe/Moscow"))
+
+    due = due_article_slots(settings, now, slot_is_open=lambda slot: False)
+
+    assert due == []
+
+
+def test_due_article_slots_never_fires_before_the_publish_time(tmp_path: Path) -> None:
+    settings = end_of_day_settings(tmp_path)
+    now = datetime(2026, 7, 10, 9, 19, tzinfo=ZoneInfo("Europe/Moscow"))
+
+    assert due_article_slots(settings, now, slot_is_open=lambda slot: True) == []
+
+
+def test_due_article_slots_uses_fixed_window_when_end_of_day_retry_is_disabled(tmp_path: Path) -> None:
+    settings = end_of_day_settings(tmp_path, DZEN_ARTICLE_SLOT_RETRY_UNTIL_END_OF_DAY="false")
+    now = datetime(2026, 7, 10, 12, 40, tzinfo=ZoneInfo("Europe/Moscow"))
+
+    assert due_article_slots(settings, now, slot_is_open=lambda slot: True) == []
+
+
+def test_due_article_slots_falls_back_to_fixed_window_without_a_slot_check(tmp_path: Path) -> None:
+    settings = end_of_day_settings(tmp_path)
+    now = datetime(2026, 7, 10, 12, 40, tzinfo=ZoneInfo("Europe/Moscow"))
+
+    assert due_article_slots(settings, now) == []
