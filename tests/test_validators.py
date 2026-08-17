@@ -1,5 +1,8 @@
 from n1_project.validators import (
     ensure_title_is_sentence,
+    leftover_english_issue_for_translation,
+    market_terminology_issues,
+    source_requires_trading_halt_terminology,
     format_dzen_article_text,
     leftover_english_issue,
     normalize_vk_owner_id,
@@ -553,3 +556,95 @@ def test_leftover_english_detects_untranslated_output() -> None:
 def test_source_has_translatable_english_ignores_hashtag_only_signal() -> None:
     assert source_has_translatable_english("\U0001f1f7\U0001f1fa\U0001f4c9 #188") is False
     assert source_has_translatable_english("VTB NET PROFIT UNDER IFRS FELL 2.5X") is True
+
+
+# Regression cases below use the real source and translation text of queue rows
+# that burned all five translation attempts on a false positive.
+
+
+def test_space_grouped_number_does_not_swallow_the_next_number() -> None:
+    # row=90322: "47,000" plus "203mm" reads as the single number "47 000 203"
+    # once the Russian text uses spaces as thousands separators.
+    source = "Russia produced 47,000 203mm shells last year"
+    output = "Россия произвела 47 000 203-мм снарядов в прошлом году"
+
+    assert translation_issues(source, output) == []
+
+
+def test_unambiguous_space_grouped_number_stays_strict() -> None:
+    source = "The fund raised 5,000 dollars"
+    output = "Фонд привлек 7 000 долларов"
+
+    issues = translation_issues(source, output)
+
+    assert any("missing numbers" in issue for issue in issues)
+    assert any("added numbers" in issue for issue in issues)
+
+
+def test_english_period_words_are_extracted_like_russian_ones() -> None:
+    # row=104213: "in the first half of the year" -> "в первом полугодии"
+    # counted as an invented number because only the Russian side was parsed.
+    source = "China increased imports of Russian oil by 92% in the first half of the year"
+    output = "Китай увеличил импорт российской нефти на 92% в первом полугодии"
+
+    assert translation_issues(source, output) == []
+
+
+def test_non_market_halt_does_not_demand_trading_terminology() -> None:
+    # row=102413: a grain terminal halting loading is not a trading halt.
+    source = "The KSK grain terminal in Novorossiysk has halted loading"
+    output = "Зерновой терминал КСК в Новороссийске приостановил отгрузку"
+
+    assert source_requires_trading_halt_terminology(source) is False
+    assert market_terminology_issues(source, output) == []
+
+
+def test_real_trading_halt_still_demands_trading_terminology() -> None:
+    for source in (
+        "Trading in the shares was halted after a circuit breaker",
+        "Nasdaq halted trading in the stock",
+        "Trading was halted on the exchange after a 20% move",
+    ):
+        assert source_requires_trading_halt_terminology(source) is True
+
+    source = "Nasdaq halted trading in the stock"
+    issues = market_terminology_issues(source, "Nasdaq остановил сделки по бумаге")
+
+    assert any("circuit breaker/trading halt" in issue for issue in issues)
+    assert market_terminology_issues(source, "Nasdaq приостановил торги по бумаге") == []
+
+
+def test_company_list_is_not_reported_as_untranslated() -> None:
+    source = "Berkshire cut stakes in American Express, Apple, Bank of America, Alphabet and Coca-Cola"
+    output = "Berkshire сократила доли в American Express, Apple, Bank of America, Alphabet и Coca-Cola"
+
+    assert leftover_english_issue_for_translation(source, output) is None
+
+
+def test_long_exchange_list_is_not_reported_as_untranslated() -> None:
+    source = (
+        "The sanctions list includes Garantex, Cryptex, Bitpapa, Netex24, Payeer, Grinex, Rapira, "
+        "Bybit, Mexc, Huobi, Kucoin, Gateio, Bingx and Bitget exchanges"
+    )
+    output = (
+        "В санкционный список попали биржи Garantex, Cryptex, Bitpapa, Netex24, Payeer, Grinex, "
+        "Rapira, Bybit, Mexc, Huobi, Kucoin, Gateio, Bingx и Bitget"
+    )
+
+    assert leftover_english_issue_for_translation(source, output) is None
+
+
+def test_untranslated_output_is_still_reported() -> None:
+    source = (
+        "The Federal Reserve signalled that policy rates will remain restrictive until inflation "
+        "returns durably toward target, according to minutes released Wednesday afternoon"
+    )
+    output = (
+        "The Federal Reserve signalled that policy rates will remain restrictive until inflation "
+        "returns durably toward target, согласно протоколам"
+    )
+
+    issue = leftover_english_issue_for_translation(source, output)
+
+    assert issue is not None
+    assert "many latin words remain" in issue

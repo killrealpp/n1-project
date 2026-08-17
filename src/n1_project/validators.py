@@ -39,6 +39,12 @@ RU_PERIOD_WORD_PATTERNS = {
         r"\bчетверт(?:ый|ого|ому|ым|ом|ая|ую|ое|ом)\s+(?:квартал|квартале|квартала|кварталу|кварталом)\b",
     ),
 }
+EN_PERIOD_WORD_PATTERNS = {
+    "1": (r"\bfirst\s+(?:half|quarter)\b",),
+    "2": (r"\bsecond\s+(?:half|quarter)\b",),
+    "3": (r"\bthird\s+quarter\b",),
+    "4": (r"\bfourth\s+quarter\b",),
+}
 RU_LEVEL_WORD_PATTERNS = {
     "1": (
         r"\bперв(?:ый|ого|ому|ым|ом|ая|ой|ую|ое|ом)\s+уров(?:ень|ня|ню|нем|не)\b",
@@ -69,7 +75,16 @@ ROMAN_PERIOD_PATTERNS = {
 }
 HASHTAG_RE = re.compile(r"#[\w_]+", re.UNICODE)
 LATIN_WORD_RE = re.compile(r"\b[A-Za-z]{4,}\b")
+CYRILLIC_WORD_RE = re.compile(r"\b[\u0400-\u04FF]{4,}\b")
 CYRILLIC_RE = re.compile(r"[\u0400-\u04FF]")
+# Below this count no output is ever reported as untranslated: real posts
+# listing companies routinely reach eleven or twelve latin words.
+LEFTOVER_ENGLISH_MIN_WORDS = 12
+# A translation that is still half latin is suspicious; below that it is not.
+LEFTOVER_ENGLISH_MIN_SHARE = 0.5
+# A real translation drops the latin share well under the source's. Staying
+# this close to the source means the English was never converted.
+LEFTOVER_ENGLISH_SOURCE_SHARE_FACTOR = 0.85
 BOLD_BLOCK_RE = re.compile(r"^\s*<b>[^<]{1,120}</b>\s*$", re.IGNORECASE)
 HTML_TAG_RE = re.compile(r"</?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
@@ -83,9 +98,21 @@ SOURCE_LIMIT_UP_RE = re.compile(r"\blimit[-\s]?up\b|\bupper\s+price\s+limit\b", 
 OUTPUT_LIMIT_UP_GOOD_RE = re.compile(r"\b(?:верхн\w*\s+планк\w*|планк\w*\s+роста)\b", re.IGNORECASE)
 OUTPUT_LIMIT_UP_BAD_RE = re.compile(r"\bлимит\s+ввер\w*|\bлимит\s+роста\b|\bпредохранител\w*", re.IGNORECASE)
 SOURCE_TRADING_HALT_RE = re.compile(
-    r"\b(?:circuit\s+breaker|trading\s+halt|halted|volatility\s+halt|volatility\s+auction)\b",
+    r"\b(?:"
+    r"circuit\s+breakers?"
+    r"|volatility\s+(?:halt|auction)s?"
+    r"|trading\s+halts?"
+    r"|halt(?:ed|s|ing)?\s+trading"
+    r")\b",
     re.IGNORECASE,
 )
+HALT_WORD_RE = re.compile(r"\bhalt(?:ed|s|ing)?\b", re.IGNORECASE)
+TRADING_CONTEXT_RE = re.compile(
+    r"\b(?:trading|trade|trades|shares?|stock|stocks|equities|securities|exchange|bourse"
+    r"|nasdaq|nyse|moex|listing|ticker)\b",
+    re.IGNORECASE,
+)
+SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 OUTPUT_TRADING_HALT_GOOD_RE = re.compile(
     r"\b(?:торг\w*\s+приостанов\w*|приостанов\w*\s+торг\w*|волатильностн\w*\s+пауз\w*|остановк\w*\s+торг\w*|дискретн\w*\s+аукцион\w*)\b",
     re.IGNORECASE,
@@ -210,6 +237,11 @@ def extract_numbers(text: str) -> set[str]:
     for value, patterns in RU_PERIOD_WORD_PATTERNS.items():
         if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
             numbers.add(value)
+    # English periods must be extracted too, otherwise "in the first half of the year"
+    # translated as "в первом полугодии" looks like an invented number.
+    for value, patterns in EN_PERIOD_WORD_PATTERNS.items():
+        if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
+            numbers.add(value)
     for value, patterns in RU_LEVEL_WORD_PATTERNS.items():
         if any(re.search(pattern, normalized, re.IGNORECASE) for pattern in patterns):
             numbers.add(value)
@@ -282,6 +314,45 @@ def normalize_number_token(value: str) -> str:
     return token + suffix
 
 
+def is_grouped_number(parts: list[str]) -> bool:
+    if not parts or not all(part.isdigit() for part in parts):
+        return False
+    if len(parts[0]) > 1 and parts[0].startswith("0"):
+        return False
+    if len(parts[0]) > 3:
+        return len(parts) == 1
+    return all(len(part) == 3 for part in parts[1:])
+
+
+def number_token_readings(value: str) -> set[str]:
+    """Return every plausible normalized reading of one extracted number token.
+
+    A space separates thousands and also separates words, so the Russian
+    "47 000 203-мм" is either the single number 47000203 or the number 47000
+    followed by 203. Accepting both readings keeps a correct translation of
+    "47,000 203mm shells" from being reported as one missing and one added
+    number. Only tokens spanning three or more space-separated groups are
+    ambiguous; "5 000" stays strict.
+    """
+    readings = {normalize_number_token(value)}
+    parts = re.split(r"[   ]", value)
+    if len(parts) < 3:
+        return readings
+    for index in range(1, len(parts)):
+        head, tail = parts[:index], parts[index:]
+        if is_grouped_number(head) and is_grouped_number(tail):
+            readings.add(normalize_number_token(" ".join(head)))
+            readings.add(normalize_number_token(" ".join(tail)))
+    return readings
+
+
+def number_keys(values: set[str]) -> set[str]:
+    keys: set[str] = set()
+    for value in values:
+        keys.update(number_token_readings(value))
+    return keys
+
+
 def extract_hashtags(text: str) -> set[str]:
     return set(HASHTAG_RE.findall(text))
 
@@ -318,8 +389,10 @@ def preservation_issues(source_text: str, output_text: str) -> list[str]:
             issues.append(f"missing {label}s: {', '.join(missing)}")
 
     source_numbers = extract_numbers(source_text)
-    output_number_keys = {normalize_number_token(value) for value in extract_numbers(output_text)}
-    missing_numbers = sorted(value for value in source_numbers if normalize_number_token(value) not in output_number_keys)
+    output_number_keys = number_keys(extract_numbers(output_text))
+    missing_numbers = sorted(
+        value for value in source_numbers if not number_token_readings(value) & output_number_keys
+    )
     if missing_numbers:
         issues.append(f"missing numbers: {', '.join(missing_numbers)}")
     return issues
@@ -349,9 +422,11 @@ def unexpected_addition_issues(source_text: str, output_text: str) -> list[str]:
         if added:
             issues.append(f"added {label}s: {', '.join(added)}")
 
-    source_number_keys = {normalize_number_token(value) for value in extract_numbers(source_text)}
+    source_number_keys = number_keys(extract_numbers(source_text))
     output_numbers = extract_numbers(output_text)
-    added_numbers = sorted(value for value in output_numbers if normalize_number_token(value) not in source_number_keys)
+    added_numbers = sorted(
+        value for value in output_numbers if not number_token_readings(value) & source_number_keys
+    )
     if added_numbers:
         issues.append(f"added numbers: {', '.join(added_numbers)}")
 
@@ -550,14 +625,76 @@ def source_has_translatable_english(source_text: str) -> bool:
     return False
 
 
+def translatable_word_counts(text: str) -> tuple[list[str], list[str]]:
+    """Split a text into latin and Cyrillic content words.
+
+    Links, hashtags, tickers and other market symbols are dropped: they stay
+    latin in any correct Russian translation, so counting them says nothing
+    about whether the text was translated.
+    """
+    cleaned = URL_RE.sub(" ", text)
+    cleaned = HASHTAG_RE.sub(" ", cleaned)
+    latin = [word for word in LATIN_WORD_RE.findall(cleaned) if not is_market_symbol_word(word)]
+    cyrillic = CYRILLIC_WORD_RE.findall(cleaned)
+    return latin, cyrillic
+
+
+def latin_word_share(latin_words: list[str], cyrillic_words: list[str]) -> float:
+    total = len(latin_words) + len(cyrillic_words)
+    if not total:
+        return 0.0
+    return len(latin_words) / total
+
+
 def leftover_english_issue_for_translation(source_text: str, output_text: str) -> str | None:
-    latin_words = LATIN_WORD_RE.findall(output_text)
-    has_cyrillic = bool(CYRILLIC_RE.search(output_text))
-    if has_cyrillic and len(latin_words) > 12:
-        return f"many latin words remain: {len(latin_words)}"
-    if not has_cyrillic and latin_words and not source_is_symbol_only(source_text):
-        return "output has no Cyrillic text"
-    return None
+    """Detect an untranslated output without punishing name-heavy posts.
+
+    A flat cap on latin words sat right on top of normal traffic: a legitimate
+    list of companies or a sanctioned-exchange roundup carries 13-41 latin
+    words and was killed after five attempts. What actually separates a failed
+    translation from a name-heavy one is how much of the latin survived: a real
+    translation converts most English words to Russian and so drops the latin
+    share well below the source, while an untranslated output keeps it.
+    """
+    if not CYRILLIC_RE.search(output_text):
+        if LATIN_WORD_RE.findall(output_text) and not source_is_symbol_only(source_text):
+            return "output has no Cyrillic text"
+        return None
+
+    output_latin, output_cyrillic = translatable_word_counts(output_text)
+    if len(output_latin) <= LEFTOVER_ENGLISH_MIN_WORDS:
+        return None
+
+    output_share = latin_word_share(output_latin, output_cyrillic)
+    if output_share <= LEFTOVER_ENGLISH_MIN_SHARE:
+        return None
+
+    source_latin, source_cyrillic = translatable_word_counts(source_text)
+    source_share = latin_word_share(source_latin, source_cyrillic)
+    if source_share and output_share < source_share * LEFTOVER_ENGLISH_SOURCE_SHARE_FACTOR:
+        return None
+
+    total_words = len(output_latin) + len(output_cyrillic)
+    return (
+        f"many latin words remain: {len(output_latin)} of {total_words} words "
+        f"({output_share:.0%}); source share {source_share:.0%}"
+    )
+
+
+def source_requires_trading_halt_terminology(source_text: str) -> bool:
+    """Report whether the source really describes an exchange trading halt.
+
+    A bare "halted" is not enough: a grain terminal that "has halted loading"
+    is not a trading halt, and demanding "торги приостановлены" for it burned
+    every translation attempt on such posts. Either the wording is explicitly
+    about trading, or the halt has to share a sentence with market vocabulary.
+    """
+    if SOURCE_TRADING_HALT_RE.search(source_text):
+        return True
+    for sentence in SENTENCE_BOUNDARY_RE.split(source_text):
+        if HALT_WORD_RE.search(sentence) and TRADING_CONTEXT_RE.search(sentence):
+            return True
+    return False
 
 
 def market_terminology_issues(source_text: str, output_text: str) -> list[str]:
@@ -565,7 +702,7 @@ def market_terminology_issues(source_text: str, output_text: str) -> list[str]:
     if SOURCE_LIMIT_UP_RE.search(source_text):
         if OUTPUT_LIMIT_UP_BAD_RE.search(output_text) or not OUTPUT_LIMIT_UP_GOOD_RE.search(output_text):
             issues.append("bad market terminology: translate limit up as верхняя планка or планка роста")
-    if SOURCE_TRADING_HALT_RE.search(source_text):
+    if source_requires_trading_halt_terminology(source_text):
         if OUTPUT_TRADING_HALT_BAD_RE.search(output_text) or not OUTPUT_TRADING_HALT_GOOD_RE.search(output_text):
             issues.append(
                 "bad market terminology: translate circuit breaker/trading halt as торги приостановлены, волатильностная пауза, остановка торгов, or дискретный аукцион"
