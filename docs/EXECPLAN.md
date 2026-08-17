@@ -71,6 +71,14 @@ The user wants one automation system that reads new English posts from a source 
 - [x] (2026-07-13) Made MAX TLS use the bundled Russian trusted CA bundle automatically when `MAX_CA_BUNDLE` is not explicitly set.
 - [x] (2026-07-28) Added a Reddit profile-publishing plan, prompt, wiki page, raw research note, and initial cadence/tag policy scaffold.
 - [x] (2026-08-04) Switched server operation guidance back to `systemd` for persistent production running under `n1-worker.service`.
+- [x] (2026-08-17) Replaced the removed `openai/gpt-5.3-chat` article model with `openai/gpt-5.6-terra` and taught `--doctor` to verify both OpenRouter slugs against the live model catalog.
+- [x] (2026-08-17) Isolated Dzen article slot failures per slot, recorded them as `failed_generation` rows with a `generation_attempts` budget, and kept an unpublished slot due until midnight.
+- [x] (2026-08-17) Gave OpenRouter calls one shared HTTP path with response-body logging, Retry-After-aware backoff on 429/5xx, and immediate readable failures on 401/402/404.
+- [x] (2026-08-17) Fixed four translation-validator false positives (space thousands separators, English period words, non-market "halted", latin-word cap) with regression tests from real queue rows.
+- [x] (2026-08-17) Added `--requeue-translations` selectors and a throttled dead-translation-queue warning to the admin chat.
+- [x] (2026-08-17) Added exponential backoff and log-level triage to Telegram admin `getUpdates` polling.
+- [x] (2026-08-17) Documented that worker logs live in journald only and that the stale `logs/*.log` leftovers should be deleted.
+- [ ] Run `scripts/check-translation-validator.py` against the production queue and tune the leftover-English thresholds from the result.
 - [ ] Fill `MAX_CHAT_ID` and run a MAX text-post test.
 - [ ] Deploy to the server with the same env contract.
 
@@ -137,6 +145,15 @@ The user wants one automation system that reads new English posts from a source 
   Evidence: `winget install --id Ollama.Ollama -e --silent --disable-interactivity --accept-package-agreements --accept-source-agreements` timed out after about 15 minutes, and `winget list --id Ollama.Ollama` still reports no matching installed package.
 
 ## Decision Log
+
+- Decision: Keep a failed article slot due until midnight instead of widening the fixed slot window.
+  Rationale: A 5-minute window against a 300-second poll gave each slot exactly one attempt, so any hiccup lost the day's article silently. Widening the window only buys a fixed number of retries and still loses the slot in a longer outage. `DZEN_ARTICLE_SLOT_MAX_ATTEMPTS` bounds the cost instead, and the article can be late rather than missing.
+
+- Decision: Compare the latin-word share of a translation against its source instead of capping latin words at a fixed count.
+  Rationale: The old cap of 12 sat exactly on normal traffic. Company lists reach eleven or twelve latin words and sanctioned-exchange roundups reach 41, while a genuinely untranslated output is distinguished not by how many latin words it has but by how few it converted. Thresholds are provisional until `scripts/check-translation-validator.py` runs against the production queue.
+
+- Decision: Drop file logging rather than add logrotate.
+  Rationale: `configure_logging` only configures stdout/stderr and the systemd unit forwards that to journald, so no process writes `logs/*.log` at all. The stale files are leftovers from the retired `screen` workflow; a logrotate config for files nobody produces would be dead configuration.
 
 - Decision: Keep Dzen publishing through Telegram bridge instead of direct Dzen API.
   Rationale: The user's working setup uses Dzen's sync bot, avoids direct Dzen API uncertainty, and fits the current automation plan.
