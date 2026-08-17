@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -12,6 +13,10 @@ from n1_project.validators import ensure_max_chars
 
 ARTICLE_ACCEPT_PREFIX = "dzen_accept:"
 ARTICLE_REJECT_PREFIX = "dzen_reject:"
+
+ADMIN_UPDATE_BACKOFF_BASE_SECONDS = 2.0
+ADMIN_UPDATE_MAX_BACKOFF_SECONDS = 60.0
+ADMIN_UPDATE_SUSTAINED_FAILURE_SECONDS = 300.0
 
 
 def repair_mojibake(text: str) -> str:
@@ -30,12 +35,18 @@ class AdminNotifier:
         enabled: bool = True,
         max_chars: int = 4096,
         dry_run: bool = False,
+        sustained_failure_seconds: float = ADMIN_UPDATE_SUSTAINED_FAILURE_SECONDS,
     ):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.enabled = enabled
         self.max_chars = max_chars
         self.dry_run = dry_run
+        self.sustained_failure_seconds = sustained_failure_seconds
+        self._consecutive_update_failures = 0
+        self._first_update_failure_at: float | None = None
+        self._last_sustained_warning_at: float | None = None
+        self._retry_after_seconds = 0.0
 
     @property
     def configured(self) -> bool:
@@ -85,6 +96,58 @@ class AdminNotifier:
             reply_markup=reply_markup,
         )
 
+    @property
+    def update_backoff_seconds(self) -> float:
+        """How long the caller should wait before polling getUpdates again."""
+        if self._consecutive_update_failures <= 0:
+            return 0.0
+        if self._retry_after_seconds > 0:
+            return min(self._retry_after_seconds, ADMIN_UPDATE_MAX_BACKOFF_SECONDS)
+        delay = ADMIN_UPDATE_BACKOFF_BASE_SECONDS * (2 ** (self._consecutive_update_failures - 1))
+        return min(delay, ADMIN_UPDATE_MAX_BACKOFF_SECONDS)
+
+    def _record_update_success(self) -> None:
+        self._consecutive_update_failures = 0
+        self._first_update_failure_at = None
+        self._last_sustained_warning_at = None
+        self._retry_after_seconds = 0.0
+
+    def _record_update_failure(self, description: str, *, retry_after: float = 0.0) -> None:
+        """Count one polling failure and log it at a level that matches its weight.
+
+        Telegram returns short bursts of 502 all day. Logging each one as a
+        warning buries real problems, so a burst stays at debug level and only
+        an outage lasting past sustained_failure_seconds is warned about, once
+        per interval.
+        """
+        now = time.monotonic()
+        self._consecutive_update_failures += 1
+        self._retry_after_seconds = max(0.0, retry_after)
+        if self._first_update_failure_at is None:
+            self._first_update_failure_at = now
+
+        failing_for = now - self._first_update_failure_at
+        delay = self.update_backoff_seconds
+        if failing_for >= self.sustained_failure_seconds and (
+            self._last_sustained_warning_at is None
+            or now - self._last_sustained_warning_at >= self.sustained_failure_seconds
+        ):
+            self._last_sustained_warning_at = now
+            logging.warning(
+                "admin getUpdates failing for %.0f min (%s consecutive, retry in %.1fs): %s",
+                failing_for / 60,
+                self._consecutive_update_failures,
+                delay,
+                description,
+            )
+            return
+        logging.debug(
+            "admin getUpdates failed (%s consecutive, retry in %.1fs): %s",
+            self._consecutive_update_failures,
+            delay,
+            description,
+        )
+
     async def get_callback_updates(self, offset: int | None, timeout_seconds: int = 0) -> list[dict[str, Any]]:
         if not self.configured:
             return []
@@ -100,11 +163,21 @@ class AdminNotifier:
                 response = await client.post(url, json=payload)
                 data = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            logging.warning("admin getUpdates request failed: %s", exc)
+            # httpx timeouts stringify to an empty message, so log the type too.
+            self._record_update_failure(f"{type(exc).__name__}: {exc!r}")
             return []
         if not data.get("ok"):
-            logging.warning("admin getUpdates failed: %s", data)
+            parameters = data.get("parameters") or {}
+            try:
+                retry_after = float(parameters.get("retry_after") or 0)
+            except (TypeError, ValueError):
+                retry_after = 0.0
+            self._record_update_failure(
+                f"error_code={data.get('error_code')} description={data.get('description')!r}",
+                retry_after=retry_after,
+            )
             return []
+        self._record_update_success()
         return list(data.get("result") or [])
 
     async def answer_callback(self, callback_query_id: str, text: str) -> None:

@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 import httpx
 
@@ -45,11 +47,15 @@ async def test_get_callback_updates_timeout_returns_empty_list(monkeypatch, capl
 
     monkeypatch.setattr(httpx, "AsyncClient", TimeoutClient)
     admin = AdminNotifier("token", "-100admin")
+    caplog.set_level(logging.DEBUG)
 
     updates = await admin.get_callback_updates(offset=123)
 
     assert updates == []
-    assert "admin getUpdates request failed" in caplog.text
+    assert "admin getUpdates failed" in caplog.text
+    # httpx timeouts stringify to nothing, so the type has to carry the meaning.
+    assert "ConnectTimeout" in caplog.text
+    assert admin.update_backoff_seconds == 2.0
 
 
 @pytest.mark.asyncio
@@ -83,3 +89,101 @@ async def test_get_callback_updates_uses_long_poll_timeout(monkeypatch) -> None:
     assert calls["client_timeout"] == 35.0
     assert calls["payload"]["timeout"] == 25
     assert calls["payload"]["offset"] == 123
+
+
+class FakeUpdatesClient:
+    """Serve queued getUpdates payloads to AdminNotifier."""
+
+    queue: list[dict] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def post(self, *args, **kwargs):
+        payload = FakeUpdatesClient.queue.pop(0)
+
+        class Response:
+            def json(self_inner):
+                return payload
+
+        return Response()
+
+
+@pytest.mark.asyncio
+async def test_repeated_gateway_errors_back_off_exponentially(monkeypatch) -> None:
+    FakeUpdatesClient.queue = [{"ok": False, "error_code": 502, "description": "Bad Gateway"}] * 4
+    monkeypatch.setattr(httpx, "AsyncClient", FakeUpdatesClient)
+    admin = AdminNotifier("token", "-100admin")
+
+    delays = []
+    for _ in range(4):
+        assert await admin.get_callback_updates(offset=None) == []
+        delays.append(admin.update_backoff_seconds)
+
+    assert delays == [2.0, 4.0, 8.0, 16.0]
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_uses_retry_after_from_telegram(monkeypatch) -> None:
+    FakeUpdatesClient.queue = [
+        {
+            "ok": False,
+            "error_code": 429,
+            "description": "Too Many Requests: retry after 5",
+            "parameters": {"retry_after": 5},
+        }
+    ]
+    monkeypatch.setattr(httpx, "AsyncClient", FakeUpdatesClient)
+    admin = AdminNotifier("token", "-100admin")
+
+    await admin.get_callback_updates(offset=None)
+
+    assert admin.update_backoff_seconds == 5.0
+
+
+@pytest.mark.asyncio
+async def test_a_burst_of_gateway_errors_stays_out_of_the_warning_log(monkeypatch, caplog) -> None:
+    FakeUpdatesClient.queue = [{"ok": False, "error_code": 502, "description": "Bad Gateway"}] * 3
+    monkeypatch.setattr(httpx, "AsyncClient", FakeUpdatesClient)
+    admin = AdminNotifier("token", "-100admin", sustained_failure_seconds=300.0)
+    caplog.set_level(logging.WARNING)
+
+    for _ in range(3):
+        await admin.get_callback_updates(offset=None)
+
+    assert caplog.text == ""
+
+
+@pytest.mark.asyncio
+async def test_a_sustained_outage_is_warned_about(monkeypatch, caplog) -> None:
+    FakeUpdatesClient.queue = [{"ok": False, "error_code": 502, "description": "Bad Gateway"}] * 2
+    monkeypatch.setattr(httpx, "AsyncClient", FakeUpdatesClient)
+    admin = AdminNotifier("token", "-100admin", sustained_failure_seconds=0.0)
+    caplog.set_level(logging.WARNING)
+
+    await admin.get_callback_updates(offset=None)
+
+    assert "admin getUpdates failing for" in caplog.text
+    assert "error_code=502" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_successful_poll_clears_the_backoff(monkeypatch) -> None:
+    FakeUpdatesClient.queue = [
+        {"ok": False, "error_code": 502, "description": "Bad Gateway"},
+        {"ok": True, "result": [{"update_id": 1}]},
+    ]
+    monkeypatch.setattr(httpx, "AsyncClient", FakeUpdatesClient)
+    admin = AdminNotifier("token", "-100admin")
+
+    await admin.get_callback_updates(offset=None)
+    assert admin.update_backoff_seconds == 2.0
+
+    assert await admin.get_callback_updates(offset=None) == [{"update_id": 1}]
+    assert admin.update_backoff_seconds == 0.0

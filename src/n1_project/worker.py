@@ -1227,6 +1227,13 @@ async def poll_admin_callbacks_forever(
             logging.exception("admin callback long-poll failed")
             await notify_admin(admin, "Admin callback polling failed", exception_report(exc))
             await asyncio.sleep(2)
+            continue
+
+        # A failed getUpdates returns instantly, so without this the loop spins
+        # against Telegram for the whole outage.
+        backoff = admin.update_backoff_seconds
+        if backoff:
+            await asyncio.sleep(backoff)
 
 
 async def handle_article_accept(
